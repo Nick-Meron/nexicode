@@ -13,7 +13,6 @@ jwt = JWTManager()
 def create_app():
     app = Flask(__name__)
 
-    # --- Configuration ---
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
         "DATABASE_URL",
         "postgresql://postgres:yourpassword@localhost:5432/nexicode"
@@ -21,12 +20,12 @@ def create_app():
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-this-in-production")
 
-    # --- Extensions ---
     db.init_app(app)
     jwt.init_app(app)
-    CORS(app, origins=["http://localhost:5173"])  # React dev server
 
-    # --- Register blueprints ---
+    # Allow ALL origins for now so we can test
+    CORS(app, resources={r"/*": {"origins": "*"}})
+
     from routes.auth import auth_bp
     from routes.courses import courses_bp
     from routes.questions import questions_bp
@@ -41,9 +40,8 @@ def create_app():
     app.register_blueprint(feedback_bp,    url_prefix="/api/feedback")
     app.register_blueprint(progress_bp,    url_prefix="/api/progress")
 
-    # --- Create tables on first run ---
     with app.app_context():
-        import models  # noqa: F401 — registers all models with SQLAlchemy
+        import models
         db.create_all()
         print("✅ Database tables created")
 
@@ -52,4 +50,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, host="0.0.0.0")
