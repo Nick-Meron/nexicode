@@ -1,25 +1,21 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
-from app import db
-from models import User
 
 auth_bp = Blueprint('auth', __name__)
 
-
 @auth_bp.route('/register', methods=['POST'])
 def register():
+    from app import db
+    from models import User
     data = request.get_json()
     if not data or not all(k in data for k in ('name', 'email', 'password')):
         return jsonify({'error': 'name, email and password are required'}), 400
-
     if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': 'Email already registered'}), 409
-
     role = data.get('role', 'student')
     if role not in ('student', 'tutor'):
         return jsonify({'error': 'Role must be student or tutor'}), 400
-
     user = User(
         name=data['name'],
         email=data['email'],
@@ -28,28 +24,27 @@ def register():
     )
     db.session.add(user)
     db.session.commit()
-
     token = create_access_token(identity={'id': user.id, 'role': user.role})
     return jsonify({'token': token, 'user': user.to_dict()}), 201
 
-
 @auth_bp.route('/login', methods=['POST'])
 def login():
+    from app import db
+    from models import User
     data = request.get_json()
     if not data or not all(k in data for k in ('email', 'password')):
         return jsonify({'error': 'email and password are required'}), 400
-
     user = User.query.filter_by(email=data['email']).first()
     if not user or not check_password_hash(user.password_hash, data['password']):
         return jsonify({'error': 'Invalid email or password'}), 401
-
     token = create_access_token(identity={'id': user.id, 'role': user.role})
     return jsonify({'token': token, 'user': user.to_dict()}), 200
-
 
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def me():
+    from app import db
+    from models import User
     identity = get_jwt_identity()
     user = User.query.get(identity['id'])
     if not user:
