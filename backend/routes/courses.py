@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
-from models import Course, SyllabusTopic
+from extensions import db
+from models import Course, SyllabusTopic, User
 
 courses_bp = Blueprint("courses", __name__)
 
@@ -11,9 +11,10 @@ courses_bp = Blueprint("courses", __name__)
 @courses_bp.route("/", methods=["GET"])
 @jwt_required()
 def list_courses():
-    identity = get_jwt_identity()
-    if identity["role"] == "tutor":
-        courses = Course.query.filter_by(tutor_id=identity["id"]).all()
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role == "tutor":
+        courses = Course.query.filter_by(tutor_id=user_id).all()
     else:
         courses = Course.query.all()
     return jsonify([c.to_dict() for c in courses]), 200
@@ -22,15 +23,16 @@ def list_courses():
 @courses_bp.route("/", methods=["POST"])
 @jwt_required()
 def create_course():
-    identity = get_jwt_identity()
-    if identity["role"] != "tutor":
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "tutor":
         return jsonify({"error": "Tutors only"}), 403
 
     data = request.get_json()
     course = Course(
         title=data["title"],
         module_code=data["module_code"],
-        tutor_id=identity["id"],
+        tutor_id=user_id,
     )
     db.session.add(course)
     db.session.commit()
@@ -49,8 +51,9 @@ def list_topics(course_id):
 @courses_bp.route("/<course_id>/topics", methods=["POST"])
 @jwt_required()
 def create_topic(course_id):
-    identity = get_jwt_identity()
-    if identity["role"] != "tutor":
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "tutor":
         return jsonify({"error": "Tutors only"}), 403
 
     data = request.get_json()

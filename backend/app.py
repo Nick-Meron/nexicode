@@ -1,21 +1,16 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_jwt_extended import JWTManager
-from flask_cors import CORS
+from flask import Flask, request, Response
 from dotenv import load_dotenv
+from extensions import db, jwt
 import os
 
 load_dotenv()
-
-db = SQLAlchemy()
-jwt = JWTManager()
 
 def create_app():
     app = Flask(__name__)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:yourpassword@localhost:5432/nexicode"
+        "postgresql+psycopg://postgres:Nickmeron007@localhost:5432/nexicode"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-this-in-production")
@@ -23,8 +18,21 @@ def create_app():
     db.init_app(app)
     jwt.init_app(app)
 
-    # Allow ALL origins for now so we can test
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    @app.after_request
+    def add_cors(response):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        return response
+
+    @app.before_request
+    def handle_options():
+        if request.method == "OPTIONS":
+            r = Response()
+            r.headers["Access-Control-Allow-Origin"] = "*"
+            r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            r.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            return r
 
     from routes.auth import auth_bp
     from routes.courses import courses_bp
