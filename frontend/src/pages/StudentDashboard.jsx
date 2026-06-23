@@ -4,16 +4,16 @@ import { getCourses, getTopics, getTopicQuestions, submitCode, getFeedback, getP
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
-  const [tab, setTab]           = useState("questions");  // questions | progress
-  const [courses, setCourses]   = useState([]);
-  const [topics, setTopics]     = useState([]);
+  const [tab, setTab]             = useState("questions");
+  const [courses, setCourses]     = useState([]);
+  const [topics, setTopics]       = useState([]);
   const [questions, setQuestions] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [selectedCourse, setSelectedCourse]     = useState(null);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
-  const [code, setCode]         = useState("");
-  const [feedback, setFeedback] = useState(null);
+  const [code, setCode]           = useState("");
+  const [feedback, setFeedback]   = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState(null);
+  const [progress, setProgress]   = useState(null);
 
   useEffect(() => {
     getCourses().then((r) => setCourses(r.data));
@@ -42,7 +42,6 @@ export default function StudentDashboard() {
     try {
       const res = await submitCode({ question_id: selectedQuestion.id, code_submitted: code });
       setFeedback(res.data.feedback);
-      // Refresh progress
       const prog = await getProgress(user.id);
       setProgress(prog.data);
     } catch (err) {
@@ -54,10 +53,11 @@ export default function StudentDashboard() {
 
   return (
     <div style={styles.page}>
+
       {/* Sidebar */}
       <aside style={styles.sidebar}>
         <div style={styles.logo}>NEXICODE</div>
-        <p style={styles.userInfo}>{user.name}<br/><span style={styles.role}>Student</span></p>
+        <p style={styles.userInfo}>{user.name}<br /><span style={styles.role}>Student</span></p>
         <nav>
           <button style={tab === "questions" ? styles.navActive : styles.navBtn} onClick={() => setTab("questions")}>Questions</button>
           <button style={tab === "progress"  ? styles.navActive : styles.navBtn} onClick={() => setTab("progress")}>My Progress</button>
@@ -67,14 +67,17 @@ export default function StudentDashboard() {
 
       {/* Main content */}
       <main style={styles.main}>
+
+        {/* ── Questions tab ─────────────────────────────── */}
         {tab === "questions" && (
           <div>
             <h2 style={styles.heading}>Programming Questions</h2>
 
-            {/* Course selector */}
+            {/* Course selector buttons */}
             <div style={styles.courseRow}>
               {courses.map((c) => (
-                <button key={c.id}
+                <button
+                  key={c.id}
                   style={selectedCourse?.id === c.id ? styles.courseActive : styles.courseBtn}
                   onClick={() => handleSelectCourse(c)}>
                   {c.title}
@@ -82,11 +85,12 @@ export default function StudentDashboard() {
               ))}
             </div>
 
-            {/* Question list */}
+            {/* Question cards */}
             {questions.length > 0 && (
               <div style={styles.questionList}>
                 {questions.map((q) => (
-                  <div key={q.id}
+                  <div
+                    key={q.id}
                     style={selectedQuestion?.id === q.id ? styles.qCardActive : styles.qCard}
                     onClick={() => { setSelectedQuestion(q); setCode(""); setFeedback(null); }}>
                     <p style={styles.qTopic}>{q.topic_title} · {q.difficulty}</p>
@@ -110,10 +114,14 @@ export default function StudentDashboard() {
                   placeholder="# Write your Python code here..."
                   spellCheck={false}
                 />
-                <button style={styles.submitBtn} onClick={handleSubmit} disabled={submitting || !code.trim()}>
+                <button
+                  style={styles.submitBtn}
+                  onClick={handleSubmit}
+                  disabled={submitting || !code.trim()}>
                   {submitting ? "Analysing..." : "Submit for feedback"}
                 </button>
 
+                {/* Feedback box */}
                 {feedback && (
                   <div style={styles.feedbackBox}>
                     <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>AI Feedback</h3>
@@ -127,13 +135,14 @@ export default function StudentDashboard() {
           </div>
         )}
 
+        {/* ── Progress tab ──────────────────────────────── */}
         {tab === "progress" && progress && (
           <div>
             <h2 style={styles.heading}>My Progress</h2>
             <div style={styles.statsRow}>
-              <StatCard label="Submissions" value={progress.report?.submissions_count ?? 0} />
+              <StatCard label="Submissions"   value={progress.report?.submissions_count ?? 0} />
               <StatCard label="Average score" value={(progress.report?.avg_score ?? 0) + "%"} />
-              <StatCard label="Strengths" value={progress.report?.strengths ?? "—"} small />
+              <StatCard label="Strengths"     value={progress.report?.strengths ?? "—"} small />
               <StatCard label="Areas to improve" value={progress.report?.weaknesses ?? "—"} small />
             </div>
 
@@ -143,7 +152,11 @@ export default function StudentDashboard() {
                 <div key={s.index} style={styles.scoreRow}>
                   <span style={styles.scoreIndex}>#{s.index}</span>
                   <div style={styles.scoreBarWrap}>
-                    <div style={{ ...styles.scoreBar, width: `${s.score}%`, background: s.score >= 70 ? "#27ae60" : s.score >= 50 ? "#f39c12" : "#e74c3c" }} />
+                    <div style={{
+                      ...styles.scoreBar,
+                      width: `${s.score}%`,
+                      background: s.score >= 70 ? "#27ae60" : s.score >= 50 ? "#f39c12" : "#e74c3c"
+                    }} />
                   </div>
                   <span style={styles.scoreNum}>{s.score}</span>
                 </div>
@@ -151,6 +164,7 @@ export default function StudentDashboard() {
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
@@ -178,16 +192,19 @@ const styles = {
   heading:      { fontSize: 24, fontWeight: 700, marginBottom: 24, color: "#1a1a1a" },
   subheading:   { fontSize: 16, fontWeight: 600, margin: "20px 0 10px", color: "#333" },
   courseRow:    { display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" },
-  courseBtn:    { padding: "8px 18px", border: "1px solid #ddd", borderRadius: 20, background: "#fff", cursor: "pointer", fontSize: 13 },
+  courseBtn:    { padding: "8px 18px", border: "1px solid #ddd", borderRadius: 20, background: "#fff", cursor: "pointer", fontSize: 13, color: "#333" },
   courseActive: { padding: "8px 18px", border: "1px solid #1a1a1a", borderRadius: 20, background: "#1a1a1a", color: "#fff", cursor: "pointer", fontSize: 13 },
   questionList: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 },
   qCard:        { padding: "14px 18px", background: "#fff", borderRadius: 10, border: "1px solid #eee", cursor: "pointer" },
   qCardActive:  { padding: "14px 18px", background: "#fff", borderRadius: 10, border: "2px solid #1a1a1a", cursor: "pointer" },
   qTopic:       { margin: "0 0 6px", fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 },
   qText:        { margin: 0, fontSize: 14, color: "#333" },
-  editorSection: { background: "#fff", borderRadius: 12, padding: "1.5rem", border: "1px solid #eee" },
-  questionFull:  { fontSize: 15, lineHeight: 1.7, color: "#222", marginBottom: 20 },
-  codeArea:     { width: "100%", height: 240, fontFamily: "monospace", fontSize: 13, padding: "12px", borderRadius: 8, border: "1px solid #ddd", background: "#fafafa", boxSizing: "border-box", resize: "vertical" },
+  editorSection:{ background: "#fff", borderRadius: 12, padding: "1.5rem", border: "1px solid #eee" },
+  questionFull: { fontSize: 15, lineHeight: 1.7, color: "#222", marginBottom: 20 },
+
+  // FIX: added color #1a1a1a so the text you type is visible
+  codeArea:     { width: "100%", height: 240, fontFamily: "monospace", fontSize: 13, padding: "12px", borderRadius: 8, border: "1px solid #ddd", background: "#fafafa", color: "#1a1a1a", boxSizing: "border-box", resize: "vertical" },
+
   submitBtn:    { marginTop: 12, padding: "10px 24px", background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer" },
   feedbackBox:  { marginTop: 24, background: "#f0f7ff", border: "1px solid #b3d4f5", borderRadius: 10, padding: "1.5rem" },
   scoreChip:    { display: "inline-block", background: "#1a1a1a", color: "#fff", borderRadius: 20, padding: "4px 14px", fontSize: 13, marginBottom: 12 },
