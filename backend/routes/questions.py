@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
-from models import Question, SyllabusTopic
+from extensions import db
+from models import Question, SyllabusTopic, User
 from services.ai_service import generate_question
 
 questions_bp = Blueprint("questions", __name__)
@@ -10,8 +10,9 @@ questions_bp = Blueprint("questions", __name__)
 @questions_bp.route("/generate", methods=["POST"])
 @jwt_required()
 def generate():
-    identity = get_jwt_identity()
-    if identity["role"] != "tutor":
+    user_id = get_jwt_identity()       # this is just the user's ID string
+    user = User.query.get(user_id)     # look up the full user from the database
+    if user.role != "tutor":
         return jsonify({"error": "Tutors only"}), 403
 
     data = request.get_json()

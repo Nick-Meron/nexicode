@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
+from extensions import db
 from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic
 from services.ai_service import generate_feedback, compare_models
 
@@ -11,7 +11,7 @@ submissions_bp = Blueprint("submissions", __name__)
 @jwt_required()
 def submit_code():
     """Student submits code → AI generates feedback immediately."""
-    identity = get_jwt_identity()
+    user_id = get_jwt_identity()    # this is just the user's ID string
     data = request.get_json()
 
     question = Question.query.get(data.get("question_id"))
@@ -22,7 +22,7 @@ def submit_code():
 
     # 1. Save submission
     submission = Submission(
-        student_id=identity["id"],
+        student_id=user_id,
         question_id=question.id,
         code_submitted=data["code_submitted"],
     )

@@ -59,9 +59,7 @@ class Course(db.Model):
     __tablename__ = "courses"
 
     id = db.Column(db.String(36), primary_key=True, default=new_uuid)
-
     title = db.Column(db.String(255), nullable=False)
-
     module_code = db.Column(db.String(50), nullable=False)
 
     tutor_id = db.Column(
@@ -111,9 +109,7 @@ class SyllabusTopic(db.Model):
     )
 
     topic_title = db.Column(db.String(255), nullable=False)
-
     learning_outcomes = db.Column(db.Text, nullable=False)
-
     marking_rubric = db.Column(db.Text, nullable=False)
 
     created_at = db.Column(
@@ -158,9 +154,7 @@ class Question(db.Model):
     )
 
     question_text = db.Column(db.Text, nullable=False)
-
     difficulty = db.Column(db.String(20), default="medium")
-
     ai_model_used = db.Column(db.String(50))
 
     generated_at = db.Column(
@@ -210,7 +204,6 @@ class Submission(db.Model):
     )
 
     code_submitted = db.Column(db.Text, nullable=False)
-
     score = db.Column(db.Integer, default=0)
 
     submitted_at = db.Column(
@@ -267,9 +260,7 @@ class Feedback(db.Model):
     )
 
     feedback_text = db.Column(db.Text, nullable=False)
-
     feedback_type = db.Column(db.String(50), default="guided")
-
     ai_model_used = db.Column(db.String(50))
 
     created_at = db.Column(
@@ -288,7 +279,9 @@ class Feedback(db.Model):
             "submission_id": self.submission_id,
             "feedback_text": self.feedback_text,
             "feedback_type": self.feedback_type,
-            "ai_model_used": self.ai_model_used
+            "ai_model_used": self.ai_model_used,
+            # Get the score from the parent submission so the frontend can show it
+            "score": self.submission.score if self.submission else 0
         }
 
 
@@ -308,13 +301,9 @@ class AIModelResult(db.Model):
     )
 
     model_name = db.Column(db.String(50), nullable=False)
-
     correctness_score = db.Column(db.Float, default=0.0)
-
     syllabus_score = db.Column(db.Float, default=0.0)
-
     quality_score = db.Column(db.Float, default=0.0)
-
     consistency_score = db.Column(db.Float, default=0.0)
 
     submission = db.relationship(
@@ -350,11 +339,8 @@ class ProgressReport(db.Model):
     )
 
     avg_score = db.Column(db.Float, default=0.0)
-
     submissions_count = db.Column(db.Integer, default=0)
-
     strengths = db.Column(db.Text)
-
     weaknesses = db.Column(db.Text)
 
     report_date = db.Column(
