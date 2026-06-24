@@ -4,15 +4,14 @@ import { getCourses, createCourse, getTopics, createTopic, generateQuestion, get
 
 export default function TutorDashboard() {
   const { user, logout } = useAuth();
-  const [tab, setTab]           = useState("courses");
-  const [courses, setCourses]   = useState([]);
+  const [tab, setTab]             = useState("courses");
+  const [courses, setCourses]     = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [topics, setTopics]     = useState([]);
-  const [selectedTopic, setSelectedTopic] = useState(null);
+  const [topics, setTopics]       = useState([]);
+  const [selectedTopic, setSelectedTopic]   = useState(null);
   const [questions, setQuestions] = useState([]);
   const [generating, setGenerating] = useState(false);
 
-  // Forms
   const [newCourse, setNewCourse] = useState({ title: "", module_code: "" });
   const [newTopic, setNewTopic]   = useState({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
   const [difficulty, setDifficulty] = useState("medium");
@@ -63,162 +62,304 @@ export default function TutorDashboard() {
   };
 
   return (
-    <div style={styles.page}>
-      <aside style={styles.sidebar}>
-        <div style={styles.logo}>NEXICODE</div>
-        <p style={styles.userInfo}>{user.name}<br/><span style={styles.role}>Tutor</span></p>
-        <nav>
-          <button style={tab === "courses"   ? styles.navActive : styles.navBtn} onClick={() => setTab("courses")}>Courses</button>
-          <button style={tab === "questions" ? styles.navActive : styles.navBtn} onClick={() => setTab("questions")}>Questions</button>
-        </nav>
-        <button style={styles.logoutBtn} onClick={logout}>Sign out</button>
+    <div style={s.page}>
+
+      {/* Sidebar */}
+      <aside style={s.sidebar}>
+        <div style={s.sideTop}>
+          <div style={s.logo}><span style={s.logoIcon}>⬡</span> NEXICODE</div>
+          <div style={s.userCard}>
+            <div style={s.avatar}>{user.name[0].toUpperCase()}</div>
+            <div>
+              <p style={s.userName}>{user.name}</p>
+              <p style={s.userRole}>Tutor</p>
+            </div>
+          </div>
+          <nav style={s.nav}>
+            {[
+              { id: "courses",   label: "🏫  My Courses" },
+              { id: "questions", label: "❓  Questions" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                style={tab === t.id ? s.navActive : s.navBtn}
+                onClick={() => setTab(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <button style={s.logoutBtn} onClick={logout}>Sign out</button>
       </aside>
 
-      <main style={styles.main}>
+      {/* Main */}
+      <main style={s.main}>
 
-        {/* ── Courses tab ─────────────────────────────────────── */}
+        {/* ── Courses tab ── */}
         {tab === "courses" && (
           <div>
-            <h2 style={styles.heading}>My Courses</h2>
+            <div style={s.pageHeader}>
+              <h1 style={s.pageTitle}>My Courses</h1>
+              <p style={s.pageSubtitle}>Create and manage your courses</p>
+            </div>
 
             {/* Create course form */}
-            <div style={styles.formCard}>
-              <h3 style={styles.subheading}>Add a course</h3>
-              <form onSubmit={handleCreateCourse} style={styles.inlineForm}>
-                <input style={styles.input} placeholder="Course title" value={newCourse.title}
-                  onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })} required />
-                <input style={styles.input} placeholder="Module code (e.g. CIS013-3)" value={newCourse.module_code}
-                  onChange={(e) => setNewCourse({ ...newCourse, module_code: e.target.value })} required />
-                <button style={styles.btn} type="submit">Create</button>
+            <div style={s.formCard}>
+              <h3 style={s.formTitle}>➕ Add a New Course</h3>
+              <form onSubmit={handleCreateCourse} style={s.inlineForm}>
+                <input
+                  placeholder="Course title e.g. Introduction to Python"
+                  value={newCourse.title}
+                  onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
+                  required
+                />
+                <input
+                  placeholder="Module code e.g. CIS013-3"
+                  value={newCourse.module_code}
+                  onChange={(e) => setNewCourse({ ...newCourse, module_code: e.target.value })}
+                  required
+                />
+                <button style={s.btn} type="submit">Create Course</button>
               </form>
             </div>
 
-            {/* Course cards */}
-            <div style={styles.grid}>
+            {/* Course cards grid */}
+            <div style={s.courseGrid}>
+              {courses.length === 0 && (
+                <p style={s.empty}>No courses yet. Create your first one above!</p>
+              )}
               {courses.map((c) => (
-                <div key={c.id} style={selectedCourse?.id === c.id ? styles.cardActive : styles.card}
+                <div
+                  key={c.id}
+                  style={selectedCourse?.id === c.id ? s.courseCardActive : s.courseCard}
                   onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
-                  <p style={styles.moduleCode}>{c.module_code}</p>
-                  <p style={styles.courseTitle}>{c.title}</p>
+                  <div style={s.courseCardTop}>
+                    <span style={s.courseIcon}>📘</span>
+                    <span style={s.moduleCode}>{c.module_code}</span>
+                  </div>
+                  <p style={s.courseTitle}>{c.title}</p>
+                  <p style={s.courseAction}>Click to manage →</p>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ── Questions tab ────────────────────────────────────── */}
+        {/* ── Questions tab ── */}
         {tab === "questions" && (
-          <div style={styles.splitLayout}>
-            {/* Left: topics */}
-            <div style={styles.topicPanel}>
-              <h2 style={styles.heading}>
-                {selectedCourse ? selectedCourse.title : "Select a course first"}
-              </h2>
+          <div>
+            <div style={s.pageHeader}>
+              <h1 style={s.pageTitle}>
+                {selectedCourse ? selectedCourse.title : "Questions"}
+              </h1>
+              <p style={s.pageSubtitle}>
+                {selectedCourse ? `${selectedCourse.module_code} · Manage topics and generate questions` : "Select a course from My Courses first"}
+              </p>
+            </div>
 
-              {selectedCourse && (
-                <>
-                  <div style={styles.formCard}>
-                    <h3 style={styles.subheading}>Add syllabus topic</h3>
+            {!selectedCourse ? (
+              <div style={s.emptyState}>
+                <p style={s.emptyIcon}>🏫</p>
+                <p style={s.emptyText}>Go to My Courses and click on a course to manage its questions.</p>
+                <button style={s.btn} onClick={() => setTab("courses")}>Go to My Courses</button>
+              </div>
+            ) : (
+              <div style={s.splitLayout}>
+
+                {/* Left — topic panel */}
+                <div style={s.topicPanel}>
+
+                  {/* Add topic form */}
+                  <div style={s.formCard}>
+                    <h3 style={s.formTitle}>➕ Add Syllabus Topic</h3>
                     <form onSubmit={handleCreateTopic}>
-                      <input style={styles.inputFull} placeholder="Topic title" value={newTopic.topic_title}
-                        onChange={(e) => setNewTopic({ ...newTopic, topic_title: e.target.value })} required />
-                      <textarea style={styles.textarea} placeholder="Learning outcomes (one per line)"
+                      <label style={s.label}>Topic title</label>
+                      <input
+                        placeholder="e.g. Variables and Data Types"
+                        value={newTopic.topic_title}
+                        onChange={(e) => setNewTopic({ ...newTopic, topic_title: e.target.value })}
+                        required
+                      />
+                      <label style={s.label}>Learning outcomes</label>
+                      <textarea
+                        style={s.textarea}
+                        placeholder="Students should be able to..."
                         value={newTopic.learning_outcomes}
-                        onChange={(e) => setNewTopic({ ...newTopic, learning_outcomes: e.target.value })} required />
-                      <textarea style={styles.textarea} placeholder="Marking rubric"
+                        onChange={(e) => setNewTopic({ ...newTopic, learning_outcomes: e.target.value })}
+                        required
+                      />
+                      <label style={s.label}>Marking rubric</label>
+                      <textarea
+                        style={s.textarea}
+                        placeholder="Correct variable naming 30 marks..."
                         value={newTopic.marking_rubric}
-                        onChange={(e) => setNewTopic({ ...newTopic, marking_rubric: e.target.value })} required />
-                      <button style={styles.btn} type="submit">Add topic</button>
+                        onChange={(e) => setNewTopic({ ...newTopic, marking_rubric: e.target.value })}
+                        required
+                      />
+                      <button style={s.btn} type="submit">Add Topic</button>
                     </form>
                   </div>
 
-                  <div style={styles.topicList}>
-                    {topics.map((t) => (
-                      <div key={t.id}
-                        style={selectedTopic?.id === t.id ? styles.topicActive : styles.topicItem}
-                        onClick={() => handleSelectTopic(t)}>
-                        {t.topic_title}
+                  {/* Topics list */}
+                  {topics.length > 0 && (
+                    <div>
+                      <p style={s.listLabel}>Topics ({topics.length})</p>
+                      <div style={s.topicList}>
+                        {topics.map((t) => (
+                          <div
+                            key={t.id}
+                            style={selectedTopic?.id === t.id ? s.topicActive : s.topicItem}
+                            onClick={() => handleSelectTopic(t)}>
+                            <span style={s.topicDot}>●</span>
+                            {t.topic_title}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+                    </div>
+                  )}
+                </div>
 
-            {/* Right: questions */}
-            <div style={styles.questionPanel}>
-              {selectedTopic ? (
-                <>
-                  <h3 style={styles.subheading}>{selectedTopic.topic_title}</h3>
-                  <div style={styles.genRow}>
-                    <select style={styles.diffSelect} value={difficulty}
-                      onChange={(e) => setDifficulty(e.target.value)}>
-                      <option value="easy">Easy</option>
-                      <option value="medium">Medium</option>
-                      <option value="hard">Hard</option>
-                    </select>
-                    <button style={styles.generateBtn} onClick={handleGenerateQuestion} disabled={generating}>
-                      {generating ? "Generating..." : "Generate question with AI"}
-                    </button>
-                  </div>
-
-                  <div style={styles.questionList}>
-                    {questions.length === 0 && (
-                      <p style={{ color: "#888", fontSize: 14 }}>No questions yet. Generate one above.</p>
-                    )}
-                    {questions.map((q, i) => (
-                      <div key={q.id} style={styles.qCard}>
-                        <div style={styles.qMeta}>Q{i + 1} · {q.difficulty} · {q.ai_model_used}</div>
-                        <p style={styles.qText}>{q.question_text}</p>
+                {/* Right — questions panel */}
+                <div style={s.questionPanel}>
+                  {!selectedTopic ? (
+                    <div style={s.emptyState}>
+                      <p style={s.emptyIcon}>📋</p>
+                      <p style={s.emptyText}>Select a topic on the left to generate questions.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={s.genCard}>
+                        <h3 style={s.formTitle}>🤖 Generate AI Question</h3>
+                        <p style={s.genSubtitle}>Topic: <strong>{selectedTopic.topic_title}</strong></p>
+                        <div style={s.genRow}>
+                          <div style={s.diffRow}>
+                            {["easy", "medium", "hard"].map((d) => (
+                              <button
+                                key={d}
+                                type="button"
+                                style={difficulty === d ? s.diffActive : s.diffBtn}
+                                onClick={() => setDifficulty(d)}>
+                                {d.charAt(0).toUpperCase() + d.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            style={generating ? s.genBtnDisabled : s.genBtn}
+                            onClick={handleGenerateQuestion}
+                            disabled={generating}>
+                            {generating ? "⏳ Generating..." : "Generate Question →"}
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p style={{ color: "#888", marginTop: "2rem" }}>Select a topic to manage questions.</p>
-              )}
-            </div>
+
+                      {/* Generated questions */}
+                      <div style={s.questionList}>
+                        {questions.length === 0 && (
+                          <p style={s.empty}>No questions yet. Generate one above.</p>
+                        )}
+                        {questions.map((q, i) => (
+                          <div key={q.id} style={s.qCard}>
+                            <div style={s.qHeader}>
+                              <span style={s.qNumber}>Q{i + 1}</span>
+                              <span style={s.qBadge}>{q.difficulty}</span>
+                              <span style={s.qModel}>{q.ai_model_used}</span>
+                            </div>
+                            <p style={s.qText}>{q.question_text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
+
       </main>
     </div>
   );
 }
 
-const styles = {
-  page:         { display: "flex", minHeight: "100vh", fontFamily: "system-ui, sans-serif", background: "#f5f5f0" },
-  sidebar:      { width: 220, background: "#1a1a1a", color: "#fff", padding: "2rem 1.5rem", display: "flex", flexDirection: "column" },
-  logo:         { fontSize: 22, fontWeight: 800, marginBottom: 24, letterSpacing: 1 },
-  userInfo:     { fontSize: 14, marginBottom: 32, lineHeight: 1.6 },
-  role:         { color: "#888", fontSize: 12, textTransform: "uppercase", letterSpacing: 1 },
-  navBtn:       { display: "block", width: "100%", padding: "10px 12px", background: "transparent", color: "#ccc", border: "none", borderRadius: 8, textAlign: "left", fontSize: 14, cursor: "pointer", marginBottom: 4 },
-  navActive:    { display: "block", width: "100%", padding: "10px 12px", background: "#333", color: "#fff", border: "none", borderRadius: 8, textAlign: "left", fontSize: 14, cursor: "pointer", marginBottom: 4 },
-  logoutBtn:    { marginTop: "auto", padding: "10px 0", background: "transparent", color: "#888", border: "1px solid #333", borderRadius: 8, cursor: "pointer", fontSize: 13 },
-  main:         { flex: 1, padding: "2.5rem 3rem", overflowY: "auto" },
-  heading:      { fontSize: 24, fontWeight: 700, marginBottom: 20, color: "#1a1a1a" },
-  subheading:   { fontSize: 15, fontWeight: 600, margin: "0 0 12px", color: "#333" },
-  formCard:     { background: "#fff", borderRadius: 12, padding: "1.5rem", border: "1px solid #eee", marginBottom: 24 },
-  inlineForm:   { display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" },
-  input:        { padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, flex: 1 },
-  inputFull:    { width: "100%", marginBottom: 10, padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, boxSizing: "border-box" },
-  textarea:     { width: "100%", marginBottom: 10, padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, height: 72, resize: "vertical", boxSizing: "border-box" },
-  btn:          { padding: "9px 20px", background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" },
-  grid:         { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 },
-  card:         { background: "#fff", borderRadius: 10, padding: "1.25rem", border: "1px solid #eee", cursor: "pointer" },
-  cardActive:   { background: "#fff", borderRadius: 10, padding: "1.25rem", border: "2px solid #1a1a1a", cursor: "pointer" },
-  moduleCode:   { margin: "0 0 6px", fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 },
-  courseTitle:  { margin: 0, fontSize: 15, fontWeight: 600, color: "#1a1a1a" },
-  splitLayout:  { display: "flex", gap: 24 },
-  topicPanel:   { width: 360, flexShrink: 0 },
-  questionPanel: { flex: 1 },
-  topicList:    { display: "flex", flexDirection: "column", gap: 6 },
-  topicItem:    { padding: "10px 14px", background: "#fff", border: "1px solid #eee", borderRadius: 8, cursor: "pointer", fontSize: 14, color: "#333" },
-  topicActive:  { padding: "10px 14px", background: "#1a1a1a", border: "1px solid #1a1a1a", borderRadius: 8, cursor: "pointer", fontSize: 14, color: "#fff" },
-  genRow:       { display: "flex", gap: 10, marginBottom: 20 },
-  diffSelect:   { padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13 },
-  generateBtn:  { padding: "9px 20px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer" },
-  questionList: { display: "flex", flexDirection: "column", gap: 12 },
-  qCard:        { background: "#fff", borderRadius: 10, padding: "1.25rem", border: "1px solid #eee" },
-  qMeta:        { fontSize: 11, color: "#888", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
-  qText:        { margin: 0, fontSize: 14, lineHeight: 1.7, color: "#333" },
+const BLUE      = "#0EA5E9";
+const BLUE_DARK = "#0284C7";
+const BLUE_LIGHT = "#E0F2FE";
+
+const s = {
+  page:            { display: "flex", minHeight: "100vh", background: "#f0f7ff", fontFamily: "inherit" },
+
+  // Sidebar
+  sidebar:         { width: 240, background: "#1a1a2e", color: "#fff", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "1.5rem 1rem" },
+  sideTop:         { display: "flex", flexDirection: "column", gap: 24 },
+  logo:            { fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: 1, padding: "0 8px", display: "flex", alignItems: "center", gap: 8 },
+  logoIcon:        { color: BLUE, fontSize: 20 },
+  userCard:        { display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "10px 12px" },
+  avatar:          { width: 36, height: 36, borderRadius: "50%", background: BLUE, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 16, flexShrink: 0 },
+  userName:        { fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 },
+  userRole:        { fontSize: 11, color: "#94a3b8", margin: 0, textTransform: "uppercase", letterSpacing: 0.5 },
+  nav:             { display: "flex", flexDirection: "column", gap: 4 },
+  navBtn:          { padding: "10px 14px", background: "transparent", border: "none", color: "#94a3b8", borderRadius: 8, textAlign: "left", fontSize: 14, fontWeight: 500, cursor: "pointer" },
+  navActive:       { padding: "10px 14px", background: "rgba(14,165,233,0.15)", border: "none", color: "#fff", borderRadius: 8, textAlign: "left", fontSize: 14, fontWeight: 600, cursor: "pointer", borderLeft: `3px solid ${BLUE}` },
+  logoutBtn:       { padding: "10px 14px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8", borderRadius: 8, fontSize: 13, cursor: "pointer" },
+
+  // Main
+  main:            { flex: 1, padding: "2rem 2.5rem", overflowY: "auto" },
+  pageHeader:      { marginBottom: 28 },
+  pageTitle:       { fontSize: 26, fontWeight: 800, color: "#1a1a2e", margin: 0 },
+  pageSubtitle:    { fontSize: 14, color: "#64748b", margin: "4px 0 0" },
+
+  // Form card
+  formCard:        { background: "#fff", borderRadius: 12, padding: "1.5rem", border: "1.5px solid #e2e8f0", marginBottom: 24 },
+  formTitle:       { fontSize: 15, fontWeight: 700, color: "#1a1a2e", margin: "0 0 16px" },
+  inlineForm:      { display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" },
+  label:           { display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.4 },
+  textarea:        { width: "100%", height: 80, padding: "10px 14px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, resize: "vertical", fontFamily: "inherit", background: "#f8fafc", color: "#1a1a2e", marginBottom: "1rem" },
+  btn:             { padding: "10px 22px", background: BLUE, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 4px 12px rgba(14,165,233,0.25)" },
+
+  // Course cards
+  courseGrid:      { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 },
+  courseCard:      { background: "#fff", borderRadius: 12, padding: "1.25rem", border: "1.5px solid #e2e8f0", cursor: "pointer", transition: "transform 0.1s" },
+  courseCardActive: { background: BLUE_LIGHT, borderRadius: 12, padding: "1.25rem", border: `2px solid ${BLUE}`, cursor: "pointer" },
+  courseCardTop:   { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  courseIcon:      { fontSize: 24 },
+  moduleCode:      { fontSize: 11, color: BLUE, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, background: BLUE_LIGHT, padding: "2px 8px", borderRadius: 10 },
+  courseTitle:     { fontSize: 15, fontWeight: 700, color: "#1a1a2e", margin: "0 0 8px" },
+  courseAction:    { fontSize: 12, color: "#94a3b8", margin: 0 },
+
+  // Split layout
+  splitLayout:     { display: "flex", gap: 20, alignItems: "flex-start" },
+  topicPanel:      { width: 340, flexShrink: 0 },
+  questionPanel:   { flex: 1 },
+
+  // Topics
+  listLabel:       { fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" },
+  topicList:       { display: "flex", flexDirection: "column", gap: 6 },
+  topicItem:       { padding: "10px 14px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, cursor: "pointer", fontSize: 14, color: "#475569", display: "flex", alignItems: "center", gap: 8 },
+  topicActive:     { padding: "10px 14px", background: BLUE_LIGHT, border: `2px solid ${BLUE}`, borderRadius: 8, cursor: "pointer", fontSize: 14, color: BLUE_DARK, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 },
+  topicDot:        { fontSize: 8, opacity: 0.5 },
+
+  // Generate card
+  genCard:         { background: "#fff", borderRadius: 12, padding: "1.5rem", border: "1.5px solid #e2e8f0", marginBottom: 20 },
+  genSubtitle:     { fontSize: 13, color: "#64748b", margin: "-8px 0 16px" },
+  genRow:          { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  diffRow:         { display: "flex", gap: 8 },
+  diffBtn:         { padding: "8px 16px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" },
+  diffActive:      { padding: "8px 16px", background: BLUE_LIGHT, border: `2px solid ${BLUE}`, borderRadius: 8, fontSize: 13, fontWeight: 700, color: BLUE, cursor: "pointer" },
+  genBtn:          { padding: "10px 22px", background: BLUE, color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(14,165,233,0.25)" },
+  genBtnDisabled:  { padding: "10px 22px", background: "#94a3b8", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "not-allowed" },
+
+  // Questions
+  questionList:    { display: "flex", flexDirection: "column", gap: 12 },
+  qCard:           { background: "#fff", borderRadius: 12, padding: "1.25rem 1.5rem", border: "1.5px solid #e2e8f0" },
+  qHeader:         { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
+  qNumber:         { fontSize: 12, fontWeight: 700, color: "#fff", background: BLUE, borderRadius: 6, padding: "2px 8px" },
+  qBadge:          { fontSize: 11, fontWeight: 700, color: "#64748b", background: "#f1f5f9", borderRadius: 6, padding: "2px 8px", textTransform: "uppercase" },
+  qModel:          { fontSize: 11, color: "#94a3b8", marginLeft: "auto" },
+  qText:           { fontSize: 14, color: "#334155", lineHeight: 1.7, margin: 0 },
+
+  // Empty states
+  emptyState:      { background: "#fff", borderRadius: 12, padding: "3rem", textAlign: "center", border: "1.5px solid #e2e8f0" },
+  emptyIcon:       { fontSize: 48, margin: "0 0 12px" },
+  emptyText:       { fontSize: 14, color: "#64748b", marginBottom: 20 },
+  empty:           { fontSize: 14, color: "#94a3b8", padding: "8px 0" },
 };
