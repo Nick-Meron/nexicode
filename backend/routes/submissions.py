@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic
 from services.ai_service import generate_feedback, compare_models
+from services.code_quality_scorer import score_code_quality
 
 submissions_bp = Blueprint("submissions", __name__)
 
@@ -37,6 +38,7 @@ def submit_code():
         marking_rubric=topic.marking_rubric,
     )
     submission.score = fb_result["score"]
+    quality_result = score_code_quality(data["code_submitted"])
 
     feedback = Feedback(
         submission_id=submission.id,
@@ -50,6 +52,7 @@ def submit_code():
     return jsonify({
         "submission": submission.to_dict(),
         "feedback":   feedback.to_dict(),
+        "quality_check": quality_result,
     }), 201
 
 
