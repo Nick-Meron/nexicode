@@ -19,6 +19,7 @@ export const getMe    = ()     => api.get("/auth/me");
 // ── Courses & Topics ─────────────────────────────────────────────────────────
 export const getCourses    = ()               => api.get("/courses/");
 export const createCourse  = (data)           => api.post("/courses/", data);
+export const deleteCourse  = (courseId)       => api.delete(`/courses/${courseId}`);
 export const getTopics     = (courseId)       => api.get(`/courses/${courseId}/topics`);
 export const createTopic   = (courseId, data) => api.post(`/courses/${courseId}/topics`, data);
 

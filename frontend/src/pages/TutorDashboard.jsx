@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getCourses, createCourse, getTopics, createTopic, generateQuestion, getTopicQuestions } from "../api";
+import { getCourses, createCourse, deleteCourse, getTopics, createTopic, generateQuestion, getTopicQuestions } from "../api";
 
 export default function TutorDashboard() {
   const { user, logout } = useAuth();
@@ -25,6 +25,17 @@ export default function TutorDashboard() {
     const res = await createCourse(newCourse);
     setCourses([...courses, res.data]);
     setNewCourse({ title: "", module_code: "" });
+  };
+
+  const handleDeleteCourse = async (e, courseId) => {
+    e.stopPropagation(); // prevent triggering handleSelectCourse when clicking delete
+    if (!window.confirm("Delete this course? This cannot be undone.")) return;
+    await deleteCourse(courseId);
+    setCourses(courses.filter((c) => c.id !== courseId));
+    if (selectedCourse?.id === courseId) {
+      setSelectedCourse(null);
+      setTopics([]);
+    }
   };
 
   const handleSelectCourse = async (course) => {
@@ -138,7 +149,15 @@ export default function TutorDashboard() {
                     <span style={s.moduleCode}>{c.module_code}</span>
                   </div>
                   <p style={s.courseTitle}>{c.title}</p>
-                  <p style={s.courseAction}>Click to manage →</p>
+                  <div style={s.courseCardBottom}>
+                    <p style={s.courseAction}>Click to manage →</p>
+                    <button
+                      style={s.deleteBtn}
+                      onClick={(e) => handleDeleteCourse(e, c.id)}
+                      title="Delete course">
+                      🗑
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -325,6 +344,8 @@ const s = {
   moduleCode:      { fontSize: 11, color: BLUE, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, background: BLUE_LIGHT, padding: "2px 8px", borderRadius: 10 },
   courseTitle:     { fontSize: 15, fontWeight: 700, color: "#1a1a2e", margin: "0 0 8px" },
   courseAction:    { fontSize: 12, color: "#94a3b8", margin: 0 },
+  courseCardBottom: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  deleteBtn:       { background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: 18, cursor: "pointer", padding: "6px 10px", borderRadius: 8, lineHeight: 1 },
 
   // Split layout
   splitLayout:     { display: "flex", gap: 20, alignItems: "flex-start" },
