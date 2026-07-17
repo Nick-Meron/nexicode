@@ -66,3 +66,25 @@ def create_topic(course_id):
     db.session.add(topic)
     db.session.commit()
     return jsonify(topic.to_dict()), 201
+
+
+@courses_bp.route("/<course_id>", methods=["DELETE"])
+@jwt_required()
+def delete_course(course_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "tutor":
+        return jsonify({"error": "Tutors only"}), 403
+
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+
+    if course.tutor_id != user_id:
+        return jsonify({"error": "You can only delete your own courses"}), 403
+
+    SyllabusTopic.query.filter_by(course_id=course_id).delete()
+    db.session.delete(course)
+    db.session.commit()
+
+    return jsonify({"message": "Course deleted successfully"}), 200

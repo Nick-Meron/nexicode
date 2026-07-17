@@ -324,6 +324,93 @@ class AIModelResult(db.Model):
 
 
 # -------------------------------------------------------------------
+# GOLD ANSWERS  (your own human-authored marking scheme + model answers)
+# -------------------------------------------------------------------
+
+class GoldAnswer(db.Model):
+    """
+    A single human-authored reference answer for one question at one
+    mark tier (1-10). This is the 'ground truth' used to test whether
+    GPT / Claude / DeepSeek score the way a human tutor would.
+    """
+    __tablename__ = "gold_answers"
+
+    id = db.Column(db.String(36), primary_key=True, default=new_uuid)
+
+    question_id = db.Column(
+        db.String(36),
+        db.ForeignKey("questions.id"),
+        nullable=False
+    )
+
+    mark_tier = db.Column(db.Integer, nullable=False)   # 1 to 10
+    code_answer = db.Column(db.Text, nullable=False)
+    rubric_note = db.Column(db.Text, nullable=False)     # why it earns this mark
+
+    created_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    question = db.relationship("Question")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "question_id": self.question_id,
+            "mark_tier": self.mark_tier,
+            "code_answer": self.code_answer,
+            "rubric_note": self.rubric_note,
+        }
+
+
+# -------------------------------------------------------------------
+# EVALUATION  (one row per AI model test run against a GoldAnswer)
+# -------------------------------------------------------------------
+
+class Evaluation(db.Model):
+    """
+    Logs one AI model's score+feedback for one gold-standard answer,
+    for one repeat run. Used to compute agreement metrics (MAE,
+    correlation, kappa) between each AI model and your own marks.
+    """
+    __tablename__ = "evaluations"
+
+    id = db.Column(db.String(36), primary_key=True, default=new_uuid)
+
+    gold_answer_id = db.Column(
+        db.String(36),
+        db.ForeignKey("gold_answers.id"),
+        nullable=False
+    )
+
+    model_name = db.Column(db.String(50), nullable=False)   # gpt / claude / deepseek
+    run_index = db.Column(db.Integer, default=1)             # repeat number (1,2,3...)
+
+    predicted_score = db.Column(db.Integer)     # the AI's own 1-10 mark
+    predicted_text = db.Column(db.Text)         # the AI's reasoning/feedback
+    latency_ms = db.Column(db.Integer)
+
+    created_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    gold_answer = db.relationship("GoldAnswer")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "gold_answer_id": self.gold_answer_id,
+            "model_name": self.model_name,
+            "run_index": self.run_index,
+            "predicted_score": self.predicted_score,
+            "predicted_text": self.predicted_text,
+            "latency_ms": self.latency_ms,
+        }
+
+
+# -------------------------------------------------------------------
 # PROGRESS REPORTS
 # -------------------------------------------------------------------
 
