@@ -13,9 +13,9 @@ from inside the 'backend' folder:
 
 Requires: the GoldAnswer / Evaluation models added to models/__init__.py,
 and the grade_gold_answer() function added to services/ai_service.py.
-It also requires OPENAI_API_KEY and DEEPSEEK_API_KEY to be set in .env —
-without them, ai_service.py will fall back to MOCK_MODE and log mock
-scores instead of real ones (fine for a dry run, not for your real results).
+For each model in MODELS_TO_RUN below, the matching API key must be set
+in .env (ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY) — if it's
+missing, this script stops with a clear message instead of running.
 """
 
 import os
@@ -25,9 +25,15 @@ from datetime import datetime, timezone
 from app import create_app
 from extensions import db
 from models import Question, GoldAnswer, Evaluation
-from services.ai_service import grade_gold_answer, MOCK_MODE
+from services.ai_service import grade_gold_answer, ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY
 
 MODELS_TO_RUN = ["claude"]  # add "gpt", "deepseek" back in once those API keys have credit
+
+REQUIRED_KEYS = {
+    "claude": ANTHROPIC_API_KEY,
+    "gpt": OPENAI_API_KEY,
+    "deepseek": DEEPSEEK_API_KEY,
+}
 
 # Small delay between API calls so 100 answers x 3 models = 300 calls
 # don't slam any provider's rate limit back-to-back.
@@ -49,15 +55,13 @@ def call_with_retries(question_text, marking_rubric, answer_text, model_name):
 
 
 def main():
-    if MOCK_MODE:
-        print("⚠️  MOCK_MODE is active — no API keys were found in .env.")
-        print("    This run will log fake mock scores, not real model results.")
-        print("    Set OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY first")
-        print("    if you want this run to count toward your thesis results.\n")
-        confirm = input("Continue anyway? (y/N): ").strip().lower()
-        if confirm != "y":
-            print("Stopped.")
-            return
+    missing = [m for m in MODELS_TO_RUN if not REQUIRED_KEYS.get(m)]
+    if missing:
+        print(f"⚠️  No API key found in .env for: {', '.join(missing)}")
+        print("    Add the relevant key (ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY)")
+        print("    to backend/.env before running this, or remove that model from")
+        print("    MODELS_TO_RUN at the top of this script.\n")
+        return
 
     app = create_app()
 
