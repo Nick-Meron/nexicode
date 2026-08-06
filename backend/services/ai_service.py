@@ -1,114 +1,262 @@
 """
 services/ai_service.py
 
-Central service for all AI model calls.
-Supports: OpenAI GPT-4o, Anthropic Claude, DeepSeek.
-When no API keys are set, uses mock responses for development/testing.
+Central AI service for NEXICODE.
+All feedback is scored 1–10 using the gold standard marking rubric.
+Supports: Anthropic Claude, OpenAI GPT-4o, DeepSeek.
 """
 import os
 import re
+import anthropic
+import openai
 
-OPENAI_KEY    = os.getenv("OPENAI_API_KEY", "")
-ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-DEEPSEEK_KEY  = os.getenv("DEEPSEEK_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "")
+DEEPSEEK_API_KEY  = os.getenv("DEEPSEEK_API_KEY", "")
+ACTIVE_MODEL      = os.getenv("ACTIVE_MODEL", "claude")
 
-# Best-performing model selected after evaluation (default: claude)
-ACTIVE_MODEL = os.getenv("ACTIVE_MODEL", "claude")
+# ── Gold Standard Marking Rubric ─────────────────────────────────────────────
+# This is the official NEXICODE marking rubric that ALL AI models must follow.
+# It is derived from the NEXICODE JavaScript Question Bank (100 model answers).
 
-# Automatically use mock mode if no API keys are set
-MOCK_MODE = not OPENAI_KEY and not ANTHROPIC_KEY and not DEEPSEEK_KEY
+GOLD_STANDARD_RUBRIC = """
+NEXICODE OFFICIAL MARKING RUBRIC — Score the student answer from 1 to 10.
+
+You MUST follow this rubric exactly. Do NOT invent your own criteria.
+
+MARK 1  — Attempts the task but syntax is completely wrong. Nothing would execute. 
+           No correct variables, functions, or logic present at all.
+
+MARK 2  — Declares or defines one element correctly (e.g. one variable or one 
+           function shell) but the program is largely incomplete or non-functional.
+
+MARK 3  — One correct element that works (e.g. one variable declared and printed, 
+           or function defined but hardcodes result instead of using parameters). 
+           Major parts still missing.
+
+MARK 4  — Two correct elements present (e.g. two variables with correct types, 
+           or function with correct parameters but not called or printed). 
+           Still incomplete overall.
+
+MARK 5  — Two correct elements present AND some output shown, but still missing 
+           one or more required parts. Partial solution that runs but is incomplete.
+
+MARK 6  — All required elements present but one contains a meaningful error 
+           (e.g. wrong data type, wrong boundary condition using > instead of >=, 
+           off-by-one error, or hardcoded value instead of using parameters/this).
+
+MARK 7  — Fully correct solution. All required elements present with correct 
+           logic, correct data types, correct boundaries. Code runs and produces 
+           correct output. Minor style issues acceptable at this level.
+
+MARK 8  — Fully correct solution that also uses best practices such as storing 
+           results in named variables before printing, or uses const where 
+           appropriate instead of let.
+
+MARK 9  — Fully correct with best practices AND labelled, descriptive output 
+           (e.g. console.log("Name:", name) instead of just console.log(name)). 
+           Clean, readable code.
+
+MARK 10 — Perfect answer. Fully correct, uses const/let appropriately, 
+           labelled output, meaningful comments explaining each section, 
+           follows all JavaScript best practices. Nothing to improve.
+"""
+
+# ── Mark level descriptions for feedback ─────────────────────────────────────
+MARK_DESCRIPTIONS = {
+    1:  "completely incorrect — no working code present",
+    2:  "very weak — only one element partially correct",
+    3:  "weak — one element works but major parts are missing",
+    4:  "below average — two elements correct but solution is incomplete",
+    5:  "average — partial solution that runs but missing required parts",
+    6:  "almost there — all elements present but one has a meaningful error",
+    7:  "good — fully correct solution with minor style issues",
+    8:  "very good — correct solution using best practices",
+    9:  "excellent — correct, best practices, and well-labelled output",
+    10: "perfect — nothing to improve",
+}
 
 
-# ---------------------------------------------------------------------------
-# Question Generation
-# ---------------------------------------------------------------------------
+# ── Main Functions ────────────────────────────────────────────────────────────
 
 def generate_question(topic_title: str, learning_outcomes: str,
                       marking_rubric: str, difficulty: str = "medium",
                       model: str = None) -> str:
     """
-    Ask an AI model to generate a curriculum-based programming question.
-    Returns the question text as a string.
+    Generate a curriculum-based programming question aligned to the syllabus topic.
+    The question must be answerable within the 1-10 gold standard marking rubric.
     """
     model = model or ACTIVE_MODEL
-    prompt = f"""You are an expert programming tutor.
-Generate ONE programming question for undergraduate students based on the following:
+
+    difficulty_guidance = {
+        "easy":   "suitable for complete beginners. Focus on one simple concept only. "
+                  "A perfect answer should be achievable in under 10 lines of code.",
+        "medium": "suitable for intermediate students. Requires combining 2-3 concepts. "
+                  "A perfect answer should be achievable in 10-20 lines of code.",
+        "hard":   "suitable for advanced students. Requires applying multiple concepts "
+                  "together including functions, arrays, or objects. "
+                  "A perfect answer should be achievable in 15-30 lines of code.",
+    }
+
+    prompt = f"""You are an expert JavaScript programming tutor creating exam questions.
+
+Generate ONE JavaScript programming question based on the following curriculum:
 
 Topic: {topic_title}
 Learning outcomes: {learning_outcomes}
 Marking rubric: {marking_rubric}
-Difficulty: {difficulty}
+Difficulty level: {difficulty} — {difficulty_guidance.get(difficulty, difficulty_guidance['medium'])}
 
-Rules:
-- The question must align strictly with the topic and learning outcomes.
-- Do NOT provide the answer or solution.
-- Be clear, concise, and academic in tone.
-- Return ONLY the question text, nothing else."""
+CRITICAL RULES:
+- The question must be directly about the topic stated above.
+- The question must ask the student to WRITE JavaScript code.
+- The question must be specific enough that a marker can clearly score it 1 to 10.
+- Do NOT ask about course enrollment, fees, or unrelated topics.
+- Do NOT provide the answer or any hints.
+- Write ONE clear paragraph describing exactly what the student must code.
+- End with a clear statement of what the output should look like.
+
+Return ONLY the question text. No preamble, no numbering, no extra text."""
 
     return _call_model(model, prompt)
 
-
-# ---------------------------------------------------------------------------
-# Code Analysis & Feedback Generation
-# ---------------------------------------------------------------------------
 
 def generate_feedback(question_text: str, code_submitted: str,
                       learning_outcomes: str, marking_rubric: str,
                       model: str = None) -> dict:
     """
-    Analyse student code and return structured guided feedback.
-    Returns dict with keys: feedback_text, score (0-100).
+    Analyse student code against the gold standard rubric.
+    Returns score out of 10 and structured guided feedback.
     """
     model = model or ACTIVE_MODEL
-    prompt = f"""You are an expert programming tutor providing structured academic feedback.
 
-Question: {question_text}
-Learning outcomes: {learning_outcomes}
-Marking rubric: {marking_rubric}
+    prompt = f"""You are an expert JavaScript programming tutor marking student work.
 
-Student's submitted code:
+QUESTION THE STUDENT WAS ASKED:
+{question_text}
+
+CURRICULUM LEARNING OUTCOMES:
+{learning_outcomes}
+
+TUTOR'S MARKING RUBRIC:
+{marking_rubric}
+
+STUDENT'S SUBMITTED CODE:
 ```
 {code_submitted}
 ```
 
-Rules:
-- Do NOT give the correct solution or rewrite the code.
-- Provide GUIDED feedback: explain what is wrong and WHY, point the student toward the fix.
-- Structure your response in three sections:
-  1. Logic & correctness issues
-  2. Code structure & style
-  3. Conceptual understanding gaps
-- End with a numeric score out of 100 on the final line in format: SCORE: XX
+{GOLD_STANDARD_RUBRIC}
 
-Return ONLY the structured feedback and score. No preamble."""
+YOUR TASK:
+1. Read the student's code carefully.
+2. Compare it against the question, learning outcomes, and marking rubric.
+3. Use the NEXICODE OFFICIAL MARKING RUBRIC above to decide the score.
+4. Write structured guided feedback in exactly this format:
+
+## 1. Logic and correctness
+[Explain what is logically correct or incorrect in the code. Be specific.]
+
+## 2. Code structure and style
+[Explain the quality of the code structure — variable naming, use of const/let, indentation.]
+
+## 3. Conceptual understanding
+[Explain what JavaScript concepts the student clearly understands and what they are missing.]
+
+## 4. How to improve
+[Give specific guided hints to help the student reach the next mark level. 
+Do NOT give the correct code. Guide them toward the fix without solving it.]
+
+SCORE: [Write the score as a number from 1 to 10 on the final line, like this: SCORE: 7]
+
+CRITICAL RULES:
+- Do NOT give the student the correct answer or rewrite their code.
+- Do NOT be harsh — be encouraging and constructive.
+- Your score MUST follow the NEXICODE OFFICIAL MARKING RUBRIC above exactly.
+- The SCORE line must be the very last line in your response."""
 
     raw = _call_model(model, prompt)
     score = _extract_score(raw)
     feedback_text = raw.rsplit("SCORE:", 1)[0].strip()
-    return {"feedback_text": feedback_text, "score": score, "model": model}
+
+    # Build a clear mark level description
+    mark_desc = MARK_DESCRIPTIONS.get(score, "")
+    score_context = f"\n\n---\n**Your mark: {score}/10** — {mark_desc}."
+
+    if score < 10:
+        next_mark = score + 1
+        next_desc = MARK_DESCRIPTIONS.get(next_mark, "")
+        score_context += f"\nTo reach {next_mark}/10, aim for an answer that is {next_desc}."
+
+    return {
+        "feedback_text": feedback_text + score_context,
+        "score":         score,
+        "score_out_of":  10,
+        "model":         model,
+    }
 
 
-# ---------------------------------------------------------------------------
-# AI Model Comparison
-# ---------------------------------------------------------------------------
+def grade_gold_answer(question_text: str, marking_rubric: str,
+                      answer_text: str, model: str = None) -> dict:
+    """
+    Blind evaluation: score a gold standard answer without revealing the expected mark.
+    Used in the AI model comparison experiment.
+    Returns predicted_mark (1-10) and raw_response.
+    """
+    model = model or ACTIVE_MODEL
+
+    prompt = f"""You are an expert JavaScript programming tutor.
+
+QUESTION:
+{question_text}
+
+MARKING RUBRIC (from the tutor):
+{marking_rubric}
+
+{GOLD_STANDARD_RUBRIC}
+
+STUDENT ANSWER:
+```
+{answer_text}
+```
+
+Score this answer from 1 to 10 using the NEXICODE OFFICIAL MARKING RUBRIC above.
+Write a brief explanation of why you gave this score.
+End your response with exactly: SCORE: [number]"""
+
+    raw = _call_model(model, prompt)
+    predicted_mark = _extract_score(raw)
+    return {"predicted_mark": predicted_mark, "raw_response": raw, "model": model}
+
 
 def compare_models(question_text: str, code_submitted: str,
                    learning_outcomes: str, marking_rubric: str) -> list:
     """
-    Run feedback generation through all three models and return comparison results.
+    Run feedback generation through all funded AI models and return comparison.
+    Skips any model whose API key is not set.
     """
     results = []
-    for model_name in ["gpt", "claude", "deepseek"]:
+    models_to_try = []
+
+    if ANTHROPIC_API_KEY:
+        models_to_try.append("claude")
+    if OPENAI_API_KEY:
+        models_to_try.append("gpt")
+    if DEEPSEEK_API_KEY:
+        models_to_try.append("deepseek")
+
+    for model_name in models_to_try:
         try:
             result = generate_feedback(
                 question_text, code_submitted,
                 learning_outcomes, marking_rubric,
-                model=model_name
+                model=model_name,
             )
             scores = _evaluate_feedback_quality(result["feedback_text"], learning_outcomes)
             results.append({
                 "model_name":        model_name,
                 "feedback_text":     result["feedback_text"],
+                "score":             result["score"],
                 "correctness_score": scores["correctness"],
                 "syllabus_score":    scores["syllabus"],
                 "quality_score":     scores["quality"],
@@ -116,208 +264,92 @@ def compare_models(question_text: str, code_submitted: str,
             })
         except Exception as e:
             results.append({"model_name": model_name, "error": str(e)})
+
     return results
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
+# ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _call_model(model: str, prompt: str) -> str:
-    """Route the prompt to the correct AI model, or use mock if no keys set."""
-    if MOCK_MODE:
-        return _mock_response(model, prompt)
-
-    if model == "gpt":
-        return _call_openai(prompt)
-    elif model == "claude":
+    if model == "claude":
         return _call_claude(prompt)
+    elif model == "gpt":
+        return _call_openai(prompt)
     elif model == "deepseek":
         return _call_deepseek(prompt)
     else:
         raise ValueError(f"Unknown model: {model}")
 
 
-# ---------------------------------------------------------------------------
-# Mock responses (used when no API keys are available)
-# ---------------------------------------------------------------------------
-
-def _mock_response(model: str, prompt: str) -> str:
-    """
-    Returns realistic fake responses for development and testing.
-    Replace this with real API calls once you have your API keys.
-    """
-
-    # --- Question generation ---
-    if "Generate ONE programming question" in prompt:
-
-        if "easy" in prompt.lower():
-            return (
-                "Write a Python program that asks the user to enter their name "
-                "and age. Store each value in a separate variable and print a "
-                "message in the format: 'Hello [name], you are [age] years old.' "
-                "Do not use any functions or loops."
-            )
-        elif "hard" in prompt.lower():
-            return (
-                "Write a Python program that reads a list of student marks from "
-                "the user (entered one per line, ending with -1) and calculates "
-                "the average, highest, and lowest mark. Display the results clearly "
-                "and handle the case where no marks are entered. Use appropriate "
-                "variable names and include comments explaining your logic."
-            )
-        else:  # medium (default)
-            return (
-                "Write a Python program that asks the user to enter two numbers "
-                "and prints their sum, difference, product, and quotient. "
-                "Store each number in a clearly named variable. "
-                "Make sure to handle the case where the user tries to divide by zero "
-                "by displaying a suitable error message instead of crashing."
-            )
-
-    # --- Feedback generation ---
-    # Each model gives slightly different feedback to simulate real comparison
-    if model == "gpt":
-        return """1. Logic & correctness issues
-Your code produces output but there are some issues to address. Check whether
-you are correctly converting the user input to a number using int() or float()
-before performing calculations. If you skip this step, Python will treat the
-input as text and arithmetic operations will not behave as expected.
-Also review your division logic - consider what happens when the second number
-is zero and add a condition to handle that case gracefully.
-
-2. Code structure & style
-Your variable names could be more descriptive. Instead of single letters like
-'a' and 'b', use names like 'first_number' and 'second_number' to make your
-code easier to read and understand. Each arithmetic result should also be stored
-in its own clearly named variable before printing.
-
-3. Conceptual understanding gaps
-Review how Python handles the input() function - it always returns a string,
-so you must explicitly convert it to the appropriate numeric type. Also think
-about the concept of division by zero - this is a runtime error in Python that
-your program should anticipate and handle using an if statement.
-
-SCORE: 62"""
-
-    elif model == "deepseek":
-        return """1. Logic & correctness issues
-The core logic of your program needs attention. The input() function returns
-a string value, so arithmetic operations like addition and multiplication will
-not work correctly unless you wrap your inputs with int() or float(). Review
-each calculation and verify it produces the correct numeric result.
-Your division operation is missing a zero-check which will cause a ZeroDivisionError
-if the user enters 0 as the second number.
-
-2. Code structure & style
-Consider breaking your code into clear sections with blank lines or comments
-separating input, processing, and output. This makes it easier to follow the
-flow of your program. Variable naming is important - use meaningful names that
-describe what the variable holds rather than generic placeholders.
-
-3. Conceptual understanding gaps
-It appears the concept of type conversion in Python may need further review.
-Python is strongly typed, meaning you cannot mix strings and integers without
-explicit conversion. Look up the int() and float() functions and practice using
-them whenever you accept numeric input from a user.
-
-SCORE: 58"""
-
-    else:  # claude (default)
-        return """1. Logic & correctness issues
-Your program structure is on the right track, but there are two key issues to
-fix. First, check that you are converting input values to numbers - the input()
-function always returns a string in Python, so you need int() or float() around
-it for maths to work. Second, your division section needs a guard: before
-dividing, check if the second number equals zero and print a friendly message
-instead of letting the program crash.
-
-2. Code structure & style
-Good effort with the overall layout. To improve readability, use descriptive
-variable names such as 'num1' and 'num2' rather than single characters.
-You should also store each result in a variable before printing, for example:
-  total = num1 + num2
-  print("Sum:", total)
-This makes your code cleaner and easier to debug.
-
-3. Conceptual understanding gaps
-The main concept to revisit is Python's type system. Every value has a type,
-and input() always gives you a string. Think about why Python cannot add a
-string and an integer, and how type conversion solves that. Also review
-conditional statements (if/else) as they are the right tool for handling
-the division by zero case.
-
-SCORE: 68"""
-
-
-# ---------------------------------------------------------------------------
-# Real API calls (used when API keys are available)
-# ---------------------------------------------------------------------------
-
-def _call_openai(prompt: str) -> str:
-    import openai
-    client = openai.OpenAI(api_key=OPENAI_KEY)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1000,
-    )
-    return response.choices[0].message.content.strip()
-
-
 def _call_claude(prompt: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     message = client.messages.create(
         model="claude-sonnet-4-5",
-        max_tokens=1000,
+        max_tokens=1200,
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text.strip()
 
 
+def _call_openai(prompt: str) -> str:
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1200,
+    )
+    return response.choices[0].message.content.strip()
+
+
 def _call_deepseek(prompt: str) -> str:
-    import openai
     client = openai.OpenAI(
-        api_key=DEEPSEEK_KEY,
+        api_key=DEEPSEEK_API_KEY,
         base_url="https://api.deepseek.com",
     )
     response = client.chat.completions.create(
         model="deepseek-coder",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1000,
+        max_tokens=1200,
     )
     return response.choices[0].message.content.strip()
 
 
-# ---------------------------------------------------------------------------
-# Scoring helpers
-# ---------------------------------------------------------------------------
-
 def _extract_score(text: str) -> int:
+    """Extract the SCORE: N value from AI response. Returns 0 if not found."""
     match = re.search(r"SCORE:\s*(\d+)", text, re.IGNORECASE)
-    return int(match.group(1)) if match else 0
+    if match:
+        score = int(match.group(1))
+        return max(1, min(10, score))  # clamp between 1 and 10
+    return 0
 
 
 def _evaluate_feedback_quality(feedback_text: str, learning_outcomes: str) -> dict:
     """
-    Heuristic scoring used for AI model comparison.
-    Measures feedback length, syllabus keyword overlap, and structure quality.
+    Heuristic scoring of feedback quality for model comparison.
+    Used by analyze_results.py — not shown to students.
     """
     words = feedback_text.split()
-    length_score = min(len(words) / 100 * 10, 10)
 
-    outcome_words  = set(learning_outcomes.lower().split())
-    feedback_words = set(feedback_text.lower().split())
+    # Correctness: length proxy (longer = more detailed)
+    length_score = min(len(words) / 80 * 10, 10)
+
+    # Syllabus alignment: keyword overlap with learning outcomes
+    outcome_words  = set(w.lower() for w in learning_outcomes.split() if len(w) > 3)
+    feedback_words = set(w.lower() for w in words if len(w) > 3)
     overlap        = len(outcome_words & feedback_words)
     syllabus_score = min(overlap / max(len(outcome_words), 1) * 10, 10)
 
-    has_sections   = all(kw in feedback_text for kw in ["1.", "2.", "3."])
-    quality_score  = 8.0 if has_sections else 5.0
+    # Quality: checks for structured sections
+    has_sections = sum(1 for s in ["Logic", "structure", "understanding", "improve"]
+                       if s.lower() in feedback_text.lower())
+    quality_score = min(has_sections / 4 * 10, 10)
+
+    # Consistency: average of above
+    consistency_score = round((length_score + syllabus_score + quality_score) / 3, 2)
 
     return {
-        "correctness":  round(length_score, 2),
-        "syllabus":     round(syllabus_score, 2),
-        "quality":      round(quality_score, 2),
-        "consistency":  round((length_score + syllabus_score) / 2, 2),
+        "correctness":  round(length_score,   2),
+        "syllabus":     round(syllabus_score,  2),
+        "quality":      round(quality_score,   2),
+        "consistency":  consistency_score,
     }

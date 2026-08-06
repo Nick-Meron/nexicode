@@ -10,7 +10,7 @@ def create_app():
 
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
         "DATABASE_URL",
-        "postgresql+psycopg://postgres:Nickmeron007@localhost:5432/nexicode"
+        "postgresql+psycopg2://postgres:password@localhost:5432/nexicode"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-this-in-production")

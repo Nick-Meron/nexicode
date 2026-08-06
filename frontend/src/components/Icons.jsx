@@ -126,3 +126,12 @@ export const LayersIcon = (p) => (
     <path d="M2 17l10 5 10-5" />
   </svg>
 );
+
+export const PeopleIcon = (p) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" {...base} {...p}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5" />
+    <path d="M16 8.2a3.2 3.2 0 0 1 0 6" />
+    <path d="M15 14.6c2.6.3 4.5 2.3 4.5 5.4" />
+  </svg>
+);

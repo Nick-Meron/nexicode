@@ -37,7 +37,7 @@ def submit_code():
         learning_outcomes=topic.learning_outcomes,
         marking_rubric=topic.marking_rubric,
     )
-    submission.score = fb_result["score"]
+    submission.score = fb_result["score"] * 10
     quality_result = score_code_quality(data["code_submitted"])
 
     feedback = Feedback(

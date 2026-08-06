@@ -4,7 +4,7 @@ import { getCourses, createCourse, deleteCourse, getTopics, createTopic, generat
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, BookIcon, PlusIcon, TrashIcon, SparkIcon,
-  ArrowRightIcon, LogoutIcon, SchoolIcon, LayersIcon, SearchIcon,
+  ArrowRightIcon, LogoutIcon, SchoolIcon, LayersIcon, SearchIcon, PeopleIcon,
 } from "../components/Icons";
 
 export default function TutorDashboard() {
@@ -18,19 +18,40 @@ export default function TutorDashboard() {
   const [generating, setGenerating] = useState(false);
   const [courseSearch, setCourseSearch] = useState("");
   const [showCourseForm, setShowCourseForm] = useState(false);
+  const [topicCounts, setTopicCounts] = useState({});
 
   const [newCourse, setNewCourse] = useState({ title: "", module_code: "" });
   const [newTopic, setNewTopic]   = useState({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
   const [difficulty, setDifficulty] = useState("medium");
 
+  const loadTopicCounts = async (courseList) => {
+    const entries = await Promise.all(
+      courseList.map(async (c) => {
+        try {
+          const r = await getTopics(c.id);
+          return [c.id, r.data.length];
+        } catch {
+          return [c.id, 0];
+        }
+      })
+    );
+    setTopicCounts(Object.fromEntries(entries));
+  };
+
   useEffect(() => {
-    getCourses().then((r) => setCourses(r.data));
+    getCourses().then((r) => {
+      setCourses(r.data);
+      loadTopicCounts(r.data);
+    });
   }, []);
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
 
   const handleCreateCourse = async (e) => {
     e.preventDefault();
     const res = await createCourse(newCourse);
     setCourses([...courses, res.data]);
+    setTopicCounts((prev) => ({ ...prev, [res.data.id]: 0 }));
     setNewCourse({ title: "", module_code: "" });
     setShowCourseForm(false);
   };
@@ -58,6 +79,7 @@ export default function TutorDashboard() {
     e.preventDefault();
     const res = await createTopic(selectedCourse.id, newTopic);
     setTopics([...topics, res.data]);
+    setTopicCounts((prev) => ({ ...prev, [selectedCourse.id]: (prev[selectedCourse.id] || 0) + 1 }));
     setNewTopic({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
   };
 
@@ -105,6 +127,9 @@ export default function TutorDashboard() {
             <button className={`nx-nav-btn ${tab === "questions" ? "active" : ""}`} onClick={() => setTab("questions")}>
               <CodeIcon /> Questions
             </button>
+            <button className={`nx-nav-btn ${tab === "students" ? "active" : ""}`} onClick={() => setTab("students")}>
+              <PeopleIcon /> Students
+            </button>
           </nav>
         </div>
         <button className="nx-logout-btn" onClick={logout}><LogoutIcon /> Sign out</button>
@@ -123,11 +148,10 @@ export default function TutorDashboard() {
                 <p className="nx-subtitle">Create and manage the courses you teach.</p>
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <div style={{ position: "relative" }}>
-                  <SearchIcon style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-mute)" }} />
+                <div className="nx-topbar-search">
+                  <SearchIcon />
                   <input
                     className="nx-input"
-                    style={{ paddingLeft: 36, width: 220, marginBottom: 0 }}
                     placeholder="Search courses..."
                     value={courseSearch}
                     onChange={(e) => setCourseSearch(e.target.value)}
@@ -190,30 +214,43 @@ export default function TutorDashboard() {
                   }
                   return (
                     <div className="nx-course-grid">
-                      {filtered.map((c) => (
-                        <div
-                          key={c.id}
-                          className={`nx-course-card ${selectedCourse?.id === c.id ? "active" : ""}`}
-                          onClick={() => { handleSelectCourse(c); setTab("questions"); }}>                          <div className="nx-course-top">
-                            <span className="nx-course-icon"><BookIcon width="18" height="18" /></span>
-                            <span className="nx-module-code">{c.module_code}</span>
+                      {filtered.map((c) => {
+                        const lessons = topicCounts[c.id] ?? 0;
+                        return (
+                          <div
+                            key={c.id}
+                            className={`nx-course-card ${selectedCourse?.id === c.id ? "active" : ""}`}
+                            onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
+                            <div className="nx-course-top">
+                              <span className="nx-course-icon"><BookIcon width="20" height="20" /></span>
+                              <span className="nx-module-code">{c.module_code}</span>
+                            </div>
+                            <p className="nx-course-title">{c.title}</p>
+                            <p className="nx-course-meta">
+                              Instructor: <strong>{user.name}</strong> · {lessons} {lessons === 1 ? "lesson" : "lessons"}
+                            </p>
+                            <div className="nx-course-footer">
+                              <div className="nx-course-updated">
+                                <span className="nx-course-mini-avatar">{user.name[0].toUpperCase()}</span>
+                                <span className="nx-course-updated-text">Created {fmtDate(c.created_at)}</span>
+                              </div>
+                            </div>
+                            <div className="nx-course-bottom" style={{ marginTop: 12 }}>
+                              <button
+                                className="nx-btn nx-btn-ghost nx-btn-sm"
+                                onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
+                                Manage <ArrowRightIcon width="12" height="12" />
+                              </button>
+                              <button
+                                className="nx-icon-btn"
+                                onClick={(e) => handleDeleteCourse(e, c.id)}
+                                title="Delete course">
+                                <TrashIcon />
+                              </button>
+                            </div>
                           </div>
-                          <p className="nx-course-title">{c.title}</p>
-                          <div className="nx-course-bottom">
-                            <button
-                              className="nx-btn nx-btn-ghost nx-btn-sm"
-                              onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
-                              Manage <ArrowRightIcon width="12" height="12" />
-                            </button>
-                            <button
-                              className="nx-icon-btn"
-                              onClick={(e) => handleDeleteCourse(e, c.id)}
-                              title="Delete course">
-                              <TrashIcon />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })()}
@@ -387,6 +424,26 @@ export default function TutorDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Students tab (placeholder — build out later) ── */}
+        {tab === "students" && (
+          <div className="nx-fade nx-content">
+            <div className="nx-header">
+              <div>
+                <p className="nx-eyebrow"><PeopleIcon width="13" height="13" /> Roster</p>
+                <h1 className="nx-title">Students</h1>
+                <p className="nx-subtitle">See who's enrolled and how they're scoring, per course.</p>
+              </div>
+            </div>
+
+            <div className="nx-empty-state">
+              <div className="nx-empty-icon"><PeopleIcon width="26" height="26" /></div>
+              <p className="nx-empty-text">
+                Student list and marking bars are coming soon. This tab is wired up and ready to go.
+              </p>
+            </div>
           </div>
         )}
 
