@@ -54,12 +54,12 @@ def get_progress(student_id):
 def _identify_strengths(scores: list) -> str:
     if not scores:
         return "No data yet."
-    high = [s for s in scores if s >= 70]
-    return f"Scored 70+ on {len(high)} of {len(scores)} submissions." if high else "Building foundations."
+    high = [s for s in scores if s >= 8]
+    return f"Scored 8+/10 on {len(high)} of {len(scores)} submissions." if high else "Building foundations."
 
 
 def _identify_weaknesses(scores: list) -> str:
     if not scores:
         return "No data yet."
-    low = [s for s in scores if s < 50]
-    return f"{len(low)} submission(s) scored below 50 — review those topics." if low else "No major gaps identified."
+    low = [s for s in scores if s < 5]
+    return f"{len(low)} submission(s) scored below 5/10 — review those topics." if low else "No major gaps identified."

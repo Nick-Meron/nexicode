@@ -115,6 +115,81 @@ def list_course_students(course_id):
     return jsonify(roster), 200
 
 
+@courses_bp.route("/<course_id>/enroll", methods=["DELETE"])
+@jwt_required()
+def leave_course(course_id):
+    """Student-only: withdraw yourself from a course you're enrolled in.
+    This does not delete your past submissions — only the enrollment link."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "student":
+        return jsonify({"error": "Students only"}), 403
+
+    enrollment = Enrollment.query.filter_by(student_id=user_id, course_id=course_id).first()
+    if not enrollment:
+        return jsonify({"error": "You are not enrolled in this course"}), 404
+
+    db.session.delete(enrollment)
+    db.session.commit()
+    return jsonify({"message": "You have left this course"}), 200
+
+
+@courses_bp.route("/<course_id>", methods=["PUT"])
+@jwt_required()
+def update_course(course_id):
+    """Tutor-only: edit a course's title and/or module code."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "tutor":
+        return jsonify({"error": "Tutors only"}), 403
+
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+    if course.tutor_id != user_id:
+        return jsonify({"error": "You can only edit your own courses"}), 403
+
+    data = request.get_json()
+    if "title" in data:
+        course.title = data["title"]
+    if "module_code" in data:
+        course.module_code = data["module_code"]
+
+    db.session.commit()
+    return jsonify(course.to_dict()), 200
+
+
+@courses_bp.route("/<course_id>/topics/<topic_id>", methods=["PUT"])
+@jwt_required()
+def update_topic(course_id, topic_id):
+    """Tutor-only: edit a syllabus topic's title, learning outcomes, or rubric."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "tutor":
+        return jsonify({"error": "Tutors only"}), 403
+
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+    if course.tutor_id != user_id:
+        return jsonify({"error": "You can only edit topics in your own courses"}), 403
+
+    topic = SyllabusTopic.query.get(topic_id)
+    if not topic or topic.course_id != course_id:
+        return jsonify({"error": "Topic not found in this course"}), 404
+
+    data = request.get_json()
+    if "topic_title" in data:
+        topic.topic_title = data["topic_title"]
+    if "learning_outcomes" in data:
+        topic.learning_outcomes = data["learning_outcomes"]
+    if "marking_rubric" in data:
+        topic.marking_rubric = data["marking_rubric"]
+
+    db.session.commit()
+    return jsonify(topic.to_dict()), 200
+
+
 @courses_bp.route("/<course_id>", methods=["DELETE"])
 @jwt_required()
 def delete_course(course_id):

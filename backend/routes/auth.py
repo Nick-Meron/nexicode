@@ -48,3 +48,31 @@ def me():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     return jsonify(user.to_dict()), 200
+
+
+@auth_bp.route('/change-password', methods=['PUT'])
+@jwt_required()
+def change_password():
+    """Logged-in user changes their own password. Requires the current
+    password to confirm identity before setting a new one."""
+    from extensions import db
+    from models import User
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.get_json()
+    if not data or not all(k in data for k in ('current_password', 'new_password')):
+        return jsonify({'error': 'current_password and new_password are required'}), 400
+
+    if not check_password_hash(user.password_hash, data['current_password']):
+        return jsonify({'error': 'Current password is incorrect'}), 401
+
+    if len(data['new_password']) < 6:
+        return jsonify({'error': 'New password must be at least 6 characters'}), 400
+
+    user.password_hash = generate_password_hash(data['new_password'])
+    db.session.commit()
+    return jsonify({'message': 'Password updated successfully'}), 200

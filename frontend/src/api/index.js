@@ -30,14 +30,18 @@ api.interceptors.response.use(
 export const register = (data) => api.post("/auth/register", data);
 export const login    = (data) => api.post("/auth/login", data);
 export const getMe    = ()     => api.get("/auth/me");
+export const changePassword = (data) => api.put("/auth/change-password", data);
 
 // ── Courses & Topics ─────────────────────────────────────────────────────────
 export const getCourses    = ()               => api.get("/courses/");
 export const createCourse  = (data)           => api.post("/courses/", data);
+export const updateCourse  = (courseId, data) => api.put(`/courses/${courseId}`, data);
 export const deleteCourse  = (courseId)       => api.delete(`/courses/${courseId}`);
 export const getTopics     = (courseId)       => api.get(`/courses/${courseId}/topics`);
 export const createTopic   = (courseId, data) => api.post(`/courses/${courseId}/topics`, data);
+export const updateTopic   = (courseId, topicId, data) => api.put(`/courses/${courseId}/topics/${topicId}`, data);
 export const getCourseStudents = (courseId)   => api.get(`/courses/${courseId}/students`);
+export const leaveCourse   = (courseId)       => api.delete(`/courses/${courseId}/enroll`);
 
 // ── Questions ────────────────────────────────────────────────────────────────
 export const generateQuestion  = (data)     => api.post("/questions/generate", data);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getCourses, createCourse, deleteCourse, getTopics, createTopic, generateQuestion, getTopicQuestions, getCourseStudents } from "../api";
+import { getCourses, createCourse, updateCourse, deleteCourse, getTopics, createTopic, updateTopic, generateQuestion, getTopicQuestions, getCourseStudents } from "../api";
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, BookIcon, PlusIcon, TrashIcon, SparkIcon,
@@ -22,6 +22,10 @@ export default function TutorDashboard() {
   const [rosterCourse, setRosterCourse] = useState(null);
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
+  const [editingCourseId, setEditingCourseId] = useState(null);
+  const [editCourseData, setEditCourseData] = useState({ title: "", module_code: "" });
+  const [editingTopic, setEditingTopic] = useState(false);
+  const [editTopicData, setEditTopicData] = useState({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
 
   const [newCourse, setNewCourse] = useState({ title: "", module_code: "" });
   const [newTopic, setNewTopic]   = useState({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
@@ -59,6 +63,24 @@ export default function TutorDashboard() {
     setShowCourseForm(false);
   };
 
+  const handleStartEditCourse = (e, course) => {
+    e.stopPropagation();
+    setEditingCourseId(course.id);
+    setEditCourseData({ title: course.title, module_code: course.module_code });
+  };
+
+  const handleCancelEditCourse = (e) => {
+    e.stopPropagation();
+    setEditingCourseId(null);
+  };
+
+  const handleSaveEditCourse = async (e, courseId) => {
+    e.stopPropagation();
+    const res = await updateCourse(courseId, editCourseData);
+    setCourses(courses.map((c) => (c.id === courseId ? res.data : c)));
+    setEditingCourseId(null);
+  };
+
   const handleDeleteCourse = async (e, courseId) => {
     e.stopPropagation(); // prevent triggering handleSelectCourse when clicking delete
     if (!window.confirm("Delete this course? This cannot be undone.")) return;
@@ -88,8 +110,27 @@ export default function TutorDashboard() {
 
   const handleSelectTopic = async (topic) => {
     setSelectedTopic(topic);
+    setEditingTopic(false);
     const res = await getTopicQuestions(topic.id);
     setQuestions(res.data);
+  };
+
+  const handleStartEditTopic = () => {
+    setEditTopicData({
+      topic_title: selectedTopic.topic_title,
+      learning_outcomes: selectedTopic.learning_outcomes,
+      marking_rubric: selectedTopic.marking_rubric,
+    });
+    setEditingTopic(true);
+  };
+
+  const handleCancelEditTopic = () => setEditingTopic(false);
+
+  const handleSaveEditTopic = async () => {
+    const res = await updateTopic(selectedCourse.id, selectedTopic.id, editTopicData);
+    setTopics(topics.map((t) => (t.id === selectedTopic.id ? res.data : t)));
+    setSelectedTopic(res.data);
+    setEditingTopic(false);
   };
 
   const handleGenerateQuestion = async () => {
@@ -237,34 +278,60 @@ export default function TutorDashboard() {
                           <div
                             key={c.id}
                             className={`nx-course-card ${selectedCourse?.id === c.id ? "active" : ""}`}
-                            onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
-                            <div className="nx-course-top">
-                              <span className="nx-course-icon"><BookIcon width="20" height="20" /></span>
-                              <span className="nx-module-code">{c.module_code}</span>
-                            </div>
-                            <p className="nx-course-title">{c.title}</p>
-                            <p className="nx-course-meta">
-                              Instructor: <strong>{user.name}</strong> · {lessons} {lessons === 1 ? "lesson" : "lessons"}
-                            </p>
-                            <div className="nx-course-footer">
-                              <div className="nx-course-updated">
-                                <span className="nx-course-mini-avatar">{user.name[0].toUpperCase()}</span>
-                                <span className="nx-course-updated-text">Created {fmtDate(c.created_at)}</span>
+                            onClick={() => { if (editingCourseId !== c.id) { handleSelectCourse(c); setTab("questions"); } }}>
+                            {editingCourseId === c.id ? (
+                              <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                <input
+                                  className="nx-input"
+                                  value={editCourseData.title}
+                                  onChange={(e) => setEditCourseData({ ...editCourseData, title: e.target.value })}
+                                  placeholder="Course title" />
+                                <input
+                                  className="nx-input"
+                                  value={editCourseData.module_code}
+                                  onChange={(e) => setEditCourseData({ ...editCourseData, module_code: e.target.value })}
+                                  placeholder="Module code" />
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <button className="nx-btn nx-btn-primary nx-btn-sm" onClick={(e) => handleSaveEditCourse(e, c.id)}>Save</button>
+                                  <button className="nx-btn nx-btn-ghost nx-btn-sm" onClick={handleCancelEditCourse}>Cancel</button>
+                                </div>
                               </div>
-                            </div>
-                            <div className="nx-course-bottom" style={{ marginTop: 12 }}>
-                              <button
-                                className="nx-btn nx-btn-ghost nx-btn-sm"
-                                onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
-                                Manage <ArrowRightIcon width="12" height="12" />
-                              </button>
-                              <button
-                                className="nx-icon-btn"
-                                onClick={(e) => handleDeleteCourse(e, c.id)}
-                                title="Delete course">
-                                <TrashIcon />
-                              </button>
-                            </div>
+                            ) : (
+                              <>
+                                <div className="nx-course-top">
+                                  <span className="nx-course-icon"><BookIcon width="20" height="20" /></span>
+                                  <span className="nx-module-code">{c.module_code}</span>
+                                </div>
+                                <p className="nx-course-title">{c.title}</p>
+                                <p className="nx-course-meta">
+                                  Instructor: <strong>{user.name}</strong> · {lessons} {lessons === 1 ? "lesson" : "lessons"}
+                                </p>
+                                <div className="nx-course-footer">
+                                  <div className="nx-course-updated">
+                                    <span className="nx-course-mini-avatar">{user.name[0].toUpperCase()}</span>
+                                    <span className="nx-course-updated-text">Created {fmtDate(c.created_at)}</span>
+                                  </div>
+                                </div>
+                                <div className="nx-course-bottom" style={{ marginTop: 12 }}>
+                                  <button
+                                    className="nx-btn nx-btn-ghost nx-btn-sm"
+                                    onClick={() => { handleSelectCourse(c); setTab("questions"); }}>
+                                    Manage <ArrowRightIcon width="12" height="12" />
+                                  </button>
+                                  <button
+                                    className="nx-btn nx-btn-ghost nx-btn-sm"
+                                    onClick={(e) => handleStartEditCourse(e, c)}>
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="nx-icon-btn"
+                                    onClick={(e) => handleDeleteCourse(e, c.id)}
+                                    title="Delete course">
+                                    <TrashIcon />
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         );
                       })}
@@ -380,9 +447,16 @@ export default function TutorDashboard() {
                           <div
                             key={t.id}
                             className={`nx-topic-item ${selectedTopic?.id === t.id ? "active" : ""}`}
-                            onClick={() => handleSelectTopic(t)}>
-                            <span className="nx-topic-dot" />
-                            {t.topic_title}
+                            onClick={() => handleSelectTopic(t)}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span><span className="nx-topic-dot" />{t.topic_title}</span>
+                            {selectedTopic?.id === t.id && (
+                              <span
+                                style={{ fontSize: 12, opacity: 0.7, cursor: "pointer" }}
+                                onClick={(e) => { e.stopPropagation(); handleStartEditTopic(); }}>
+                                Edit
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -396,6 +470,31 @@ export default function TutorDashboard() {
                     <div className="nx-empty-state">
                       <div className="nx-empty-icon"><LayersIcon width="26" height="26" /></div>
                       <p className="nx-empty-text">Select a topic on the left to generate questions.</p>
+                    </div>
+                  ) : editingTopic ? (
+                    <div className="nx-card nx-gen-card" style={{ marginBottom: 20 }}>
+                      <h3 className="nx-card-title">Edit Topic</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+                        <input
+                          className="nx-input"
+                          value={editTopicData.topic_title}
+                          onChange={(e) => setEditTopicData({ ...editTopicData, topic_title: e.target.value })}
+                          placeholder="Topic title" />
+                        <textarea
+                          className="nx-input"
+                          value={editTopicData.learning_outcomes}
+                          onChange={(e) => setEditTopicData({ ...editTopicData, learning_outcomes: e.target.value })}
+                          placeholder="Learning outcomes" />
+                        <textarea
+                          className="nx-input"
+                          value={editTopicData.marking_rubric}
+                          onChange={(e) => setEditTopicData({ ...editTopicData, marking_rubric: e.target.value })}
+                          placeholder="Marking rubric" />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button className="nx-btn" onClick={handleSaveEditTopic}>Save</button>
+                          <button className="nx-btn nx-btn-ghost" onClick={handleCancelEditTopic}>Cancel</button>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <>

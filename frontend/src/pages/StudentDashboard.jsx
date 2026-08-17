@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getCourses, getTopics, getTopicQuestions, submitCode, getProgress } from "../api";
+import { getCourses, getTopics, getTopicQuestions, submitCode, getProgress, leaveCourse, changePassword } from "../api";
 import "../styles/dashboard.css";
 import {
-  HexIcon, CodeIcon, ChartIcon, BookIcon, ArrowRightIcon, LogoutIcon,
+  HexIcon, CodeIcon, ChartIcon, BookIcon, ArrowRightIcon, LogoutIcon, SettingsIcon,
   SchoolIcon, LayersIcon, SearchIcon, ClipboardIcon, TrophyIcon, TrendIcon,
 } from "../components/Icons";
 
@@ -20,6 +20,8 @@ export default function StudentDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress]     = useState(null);
   const [courseSearch, setCourseSearch] = useState("");
+  const [pwForm, setPwForm] = useState({ current_password: "", new_password: "" });
+  const [pwMessage, setPwMessage] = useState(null);
 
   const loadTopicCounts = async (courseList) => {
   const entries = await Promise.all(
@@ -42,6 +44,32 @@ useEffect(() => {
   });
   getProgress(user.id).then((r) => setProgress(r.data));
 }, [user.id]);
+
+  const handleLeaveCourse = async (e, courseId) => {
+    e.stopPropagation();
+    if (!window.confirm("Leave this course? Your past submissions will be kept, but you'll need to submit again to rejoin.")) return;
+    try {
+      await leaveCourse(courseId);
+      if (selectedCourse?.id === courseId) {
+        setSelectedCourse(null);
+        setQuestions([]);
+      }
+    } catch (err) {
+      window.alert(err.response?.data?.error || "You're not enrolled in this course yet.");
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPwMessage(null);
+    try {
+      await changePassword(pwForm);
+      setPwMessage({ type: "success", text: "Password updated successfully." });
+      setPwForm({ current_password: "", new_password: "" });
+    } catch (err) {
+      setPwMessage({ type: "error", text: err.response?.data?.error || "Could not update password." });
+    }
+  };
 
   const handleSelectCourse = async (course) => {
     setSelectedCourse(course);
@@ -105,7 +133,10 @@ useEffect(() => {
             </button>
           </nav>
         </div>
-        <button className="nx-logout-btn" onClick={logout}><LogoutIcon /> Sign out</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <button className="nx-logout-btn" onClick={() => setTab("account")}><SettingsIcon /> Account</button>
+          <button className="nx-logout-btn" onClick={logout}><LogoutIcon /> Sign out</button>
+        </div>
       </aside>
 
       {/* Main */}
@@ -159,6 +190,9 @@ useEffect(() => {
                       <div className="nx-course-bottom" style={{ marginTop: 16 }}>
                         <button className="nx-btn nx-btn-ghost nx-btn-sm" onClick={() => handleSelectCourse(c)}>
                           {selectedCourse?.id === c.id ? "Selected" : "View questions"} <ArrowRightIcon width="12" height="12" />
+                        </button>
+                        <button className="nx-btn nx-btn-ghost nx-btn-sm" onClick={(e) => handleLeaveCourse(e, c.id)}>
+                          Leave
                         </button>
                       </div>
                     </div>
@@ -280,6 +314,44 @@ useEffect(() => {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {tab === "account" && (
+          <div className="nx-fade nx-content">
+            <div className="nx-header">
+              <div>
+                <p className="nx-eyebrow">Settings</p>
+                <h1 className="nx-title">Account</h1>
+                <p className="nx-subtitle">Update your password.</p>
+              </div>
+            </div>
+
+            <div className="nx-card" style={{ maxWidth: 400 }}>
+              <h3 className="nx-card-title">Change Password</h3>
+              <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+                <input
+                  className="nx-input"
+                  type="password"
+                  placeholder="Current password"
+                  value={pwForm.current_password}
+                  onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })}
+                  required />
+                <input
+                  className="nx-input"
+                  type="password"
+                  placeholder="New password (min 6 characters)"
+                  value={pwForm.new_password}
+                  onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
+                  required />
+                {pwMessage && (
+                  <p style={{ color: pwMessage.type === "success" ? "green" : "crimson", fontSize: 13 }}>
+                    {pwMessage.text}
+                  </p>
+                )}
+                <button className="nx-btn" type="submit">Update Password</button>
+              </form>
+            </div>
           </div>
         )}
 
