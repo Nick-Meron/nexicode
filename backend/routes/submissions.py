@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
-from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic
+from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic, Enrollment
 from services.ai_service import generate_feedback, compare_models
 from services.code_quality_scorer import score_code_quality
 
@@ -21,6 +21,15 @@ def submit_code():
 
     topic = SyllabusTopic.query.get(question.topic_id)
 
+    # Enroll the student in this course if this is their first submission
+    # to it. Safe to call every time — does nothing if already enrolled.
+    already_enrolled = Enrollment.query.filter_by(
+        student_id=user_id, course_id=topic.course_id
+    ).first()
+    if not already_enrolled:
+        db.session.add(Enrollment(student_id=user_id, course_id=topic.course_id))
+        db.session.flush()
+
     # 1. Save submission
     submission = Submission(
         student_id=user_id,
@@ -37,7 +46,7 @@ def submit_code():
         learning_outcomes=topic.learning_outcomes,
         marking_rubric=topic.marking_rubric,
     )
-    submission.score = fb_result["score"] 
+    submission.score = fb_result["score"]
     quality_result = score_code_quality(data["code_submitted"])
 
     feedback = Feedback(

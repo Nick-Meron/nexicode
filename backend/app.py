@@ -1,6 +1,7 @@
 from flask import Flask, request, Response
 from dotenv import load_dotenv
 from extensions import db, jwt
+from datetime import timedelta
 import os
 
 load_dotenv()
@@ -14,6 +15,10 @@ def create_app():
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-this-in-production")
+
+    # Flask-JWT-Extended defaults to a 15-minute token if this isn't set,
+    # which was silently logging people out mid-session during dev/testing.
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=24)
 
     db.init_app(app)
     jwt.init_app(app)

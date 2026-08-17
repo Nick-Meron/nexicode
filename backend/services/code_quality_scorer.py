@@ -2,18 +2,30 @@
 services/code_quality_scorer.py
 
 Original, non-AI scoring engine for student code submissions.
-Analyzes the submitted code directly using static checks — no API calls.
+Analyzes the submitted JavaScript code directly using static checks —
+no API calls. This is the JS-specific companion to the Claude-marked
+score: Claude judges logical correctness against the syllabus rubric,
+this script independently judges code hygiene from the raw text alone.
 """
 
 import re
 
 BAD_NAME_PATTERN = re.compile(r"^[a-zA-Z]$|^(temp|tmp|val|data|x1|x2|foo|bar)$")
 
-PYTHON_KEYWORDS = {
-    "if", "else", "elif", "for", "while", "def", "return", "import",
-    "from", "as", "try", "except", "finally", "class", "with", "in",
-    "is", "not", "and", "or", "True", "False", "None", "print", "input"
+# Reserved words that can appear before "=" in a declaration line but are
+# not themselves variable names (e.g. "let", "const" in "let x = 5").
+JS_KEYWORDS = {
+    "if", "else", "for", "while", "do", "function", "return", "import",
+    "export", "from", "as", "try", "catch", "finally", "class", "extends",
+    "in", "of", "typeof", "instanceof", "new", "delete", "void", "this",
+    "true", "false", "null", "undefined", "console", "switch", "case",
+    "break", "continue", "default", "async", "await", "yield", "static",
+    "get", "set", "super", "throw",
 }
+
+# Words that precede a declaration and should be stripped, not treated
+# as the variable name itself.
+DECLARATION_KEYWORDS = {"let", "const", "var"}
 
 
 def score_code_quality(code: str) -> dict:
@@ -46,7 +58,7 @@ def score_code_quality(code: str) -> dict:
 
     if handles_errors:
         score += 25
-        notes.append("Code includes error handling (try/except).")
+        notes.append("Code includes error handling (try/catch).")
     else:
         notes.append("No error handling detected — consider handling edge cases.")
 
@@ -82,21 +94,45 @@ def score_code_quality(code: str) -> dict:
 
 
 def _check_comments(code: str) -> bool:
-    return bool(re.search(r"#.+", code))
+    """JS single-line (//) or block (/* ... */) comments."""
+    return bool(re.search(r"//.+", code)) or bool(re.search(r"/\*[\s\S]*?\*/", code))
 
 
 def _check_variable_names(code: str) -> bool:
-    assignments = re.findall(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=", code, re.MULTILINE)
-    candidates = [a for a in assignments if a not in PYTHON_KEYWORDS]
+    """
+    Finds JS variable declarations (let/const/var NAME = ...) and flags
+    generic single-letter or placeholder names, ignoring loop counters
+    (i, j, k are conventional and not penalised).
+    """
+    declarations = re.findall(
+        r"\b(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=",
+        code,
+    )
+    candidates = [name for name in declarations if name not in JS_KEYWORDS]
     if not candidates:
         return True
-    bad = sum(1 for name in candidates if BAD_NAME_PATTERN.match(name))
+
+    loop_counters = {"i", "j", "k"}
+    bad = sum(
+        1 for name in candidates
+        if name not in loop_counters and BAD_NAME_PATTERN.match(name)
+    )
     return (bad / len(candidates)) <= 0.3
 
 
 def _check_error_handling(code: str) -> bool:
-    return "try" in code and "except" in code
+    return "try" in code and "catch" in code
 
 
 def _check_functions(code: str) -> bool:
-    return bool(re.search(r"^\s*def\s+\w+\s*\(", code, re.MULTILINE))
+    """
+    Detects standard function declarations, function expressions,
+    and arrow functions — the three common JS ways to define one.
+    """
+    patterns = [
+        r"\bfunction\s+\w*\s*\(",           # function foo() / function()
+        r"\b\w+\s*=\s*function\s*\(",       # const foo = function()
+        r"\([^()]*\)\s*=>",                 # (x, y) => ...
+        r"\b\w+\s*=>",                      # x => ...
+    ]
+    return any(re.search(p, code) for p in patterns)

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getCourses, createCourse, deleteCourse, getTopics, createTopic, generateQuestion, getTopicQuestions } from "../api";
+import { getCourses, createCourse, deleteCourse, getTopics, createTopic, generateQuestion, getTopicQuestions, getCourseStudents } from "../api";
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, BookIcon, PlusIcon, TrashIcon, SparkIcon,
@@ -19,6 +19,9 @@ export default function TutorDashboard() {
   const [courseSearch, setCourseSearch] = useState("");
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [topicCounts, setTopicCounts] = useState({});
+  const [rosterCourse, setRosterCourse] = useState(null);
+  const [roster, setRoster] = useState([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
 
   const [newCourse, setNewCourse] = useState({ title: "", module_code: "" });
   const [newTopic, setNewTopic]   = useState({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
@@ -103,6 +106,20 @@ export default function TutorDashboard() {
   };
 
   const diffBadge = (d) => `nx-badge nx-badge-${["easy", "medium", "hard"].includes(d) ? d : "neutral"}`;
+
+  const handleSelectRosterCourse = async (course) => {
+    setRosterCourse(course);
+    setRosterLoading(true);
+    try {
+      const res = await getCourseStudents(course.id);
+      setRoster(res.data);
+    } catch (err) {
+      alert("Couldn't load students: " + (err.response?.data?.error || err.message));
+      setRoster([]);
+    } finally {
+      setRosterLoading(false);
+    }
+  };
 
   return (
     <div className="nx-page">
@@ -427,7 +444,7 @@ export default function TutorDashboard() {
           </div>
         )}
 
-        {/* ── Students tab (placeholder — build out later) ── */}
+        {/* ── Students tab ── */}
         {tab === "students" && (
           <div className="nx-fade nx-content">
             <div className="nx-header">
@@ -438,12 +455,66 @@ export default function TutorDashboard() {
               </div>
             </div>
 
-            <div className="nx-empty-state">
-              <div className="nx-empty-icon"><PeopleIcon width="26" height="26" /></div>
-              <p className="nx-empty-text">
-                Student list and marking bars are coming soon. This tab is wired up and ready to go.
-              </p>
-            </div>
+            {courses.length === 0 ? (
+              <div className="nx-empty-state">
+                <div className="nx-empty-icon"><PeopleIcon width="26" height="26" /></div>
+                <p className="nx-empty-text">Create a course first — students show up here once they submit work.</p>
+              </div>
+            ) : (
+              <>
+                <div className="nx-course-picker">
+                  {courses.map((c) => (
+                    <button
+                      key={c.id}
+                      className={`nx-chip ${rosterCourse?.id === c.id ? "active" : ""}`}
+                      onClick={() => handleSelectRosterCourse(c)}
+                    >
+                      {c.title}
+                    </button>
+                  ))}
+                </div>
+
+                {!rosterCourse ? (
+                  <div className="nx-empty-state">
+                    <div className="nx-empty-icon"><PeopleIcon width="26" height="26" /></div>
+                    <p className="nx-empty-text">Pick a course above to see its roster.</p>
+                  </div>
+                ) : rosterLoading ? (
+                  <p className="nx-subtitle">Loading…</p>
+                ) : roster.length === 0 ? (
+                  <div className="nx-empty-state">
+                    <div className="nx-empty-icon"><PeopleIcon width="26" height="26" /></div>
+                    <p className="nx-empty-text">
+                      No students enrolled in {rosterCourse.title} yet — they're added automatically
+                      the first time they submit a question in this course.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="nx-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Submissions</th>
+                        <th>Avg score</th>
+                        <th>Enrolled</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {roster.map((s) => (
+                        <tr key={s.student_id}>
+                          <td>{s.name}</td>
+                          <td>{s.email}</td>
+                          <td>{s.submissions_count}</td>
+                          <td>{s.avg_score} / 10</td>
+                          <td>{fmtDate(s.enrolled_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            )}
           </div>
         )}
 

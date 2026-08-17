@@ -372,6 +372,51 @@ class ProgressReport(db.Model):
 
 
 # -------------------------------------------------------------------
+# ENROLLMENTS
+# Links a student to a course. Created automatically the first time a
+# student submits code for any question in that course (see
+# routes/submissions.py). One row per (student, course) pair.
+# -------------------------------------------------------------------
+
+class Enrollment(db.Model):
+    __tablename__ = "enrollments"
+
+    id = db.Column(db.String(36), primary_key=True, default=new_uuid)
+
+    student_id = db.Column(
+        db.String(36),
+        db.ForeignKey("users.id"),
+        nullable=False
+    )
+
+    course_id = db.Column(
+        db.String(36),
+        db.ForeignKey("courses.id"),
+        nullable=False
+    )
+
+    enrolled_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    student = db.relationship("User")
+    course = db.relationship("Course")
+
+    __table_args__ = (
+        db.UniqueConstraint("student_id", "course_id", name="uq_enrollment_student_course"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "student_id": self.student_id,
+            "course_id": self.course_id,
+            "enrolled_at": self.enrolled_at.isoformat()
+        }
+
+
+# -------------------------------------------------------------------
 # GOLD ANSWERS
 # Your own hand-written model answers + hand-given mark (1-10), used
 # as the fixed human standard for the blind AI model comparison.

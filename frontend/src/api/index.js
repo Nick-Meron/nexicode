@@ -11,6 +11,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// If the token has expired or is invalid, send the user back to login
+// with a clear message instead of showing a raw "401" error everywhere.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("nexicode_token");
+      if (!window.location.pathname.includes("/login")) {
+        window.location.href = "/login?expired=1";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const register = (data) => api.post("/auth/register", data);
 export const login    = (data) => api.post("/auth/login", data);
@@ -22,6 +37,7 @@ export const createCourse  = (data)           => api.post("/courses/", data);
 export const deleteCourse  = (courseId)       => api.delete(`/courses/${courseId}`);
 export const getTopics     = (courseId)       => api.get(`/courses/${courseId}/topics`);
 export const createTopic   = (courseId, data) => api.post(`/courses/${courseId}/topics`, data);
+export const getCourseStudents = (courseId)   => api.get(`/courses/${courseId}/students`);
 
 // ── Questions ────────────────────────────────────────────────────────────────
 export const generateQuestion  = (data)     => api.post("/questions/generate", data);

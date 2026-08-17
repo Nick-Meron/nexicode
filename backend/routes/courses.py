@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
-from models import Course, SyllabusTopic, User
+from models import Course, SyllabusTopic, User, Enrollment, Submission, Question
 
 courses_bp = Blueprint("courses", __name__)
 
@@ -66,6 +66,53 @@ def create_topic(course_id):
     db.session.add(topic)
     db.session.commit()
     return jsonify(topic.to_dict()), 201
+
+
+# ── Students (roster) ───────────────────────────────────────────────────────
+
+@courses_bp.route("/<course_id>/students", methods=["GET"])
+@jwt_required()
+def list_course_students(course_id):
+    """Tutor-only: list every student enrolled in this course, with their
+    submission count and average score for this course specifically."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "tutor":
+        return jsonify({"error": "Tutors only"}), 403
+
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+    if course.tutor_id != user_id:
+        return jsonify({"error": "You can only view your own course's students"}), 403
+
+    enrollments = Enrollment.query.filter_by(course_id=course_id).all()
+
+    roster = []
+    for e in enrollments:
+        subs = (
+            Submission.query
+            .join(Question, Submission.question_id == Question.id)
+            .join(SyllabusTopic, Question.topic_id == SyllabusTopic.id)
+            .filter(SyllabusTopic.course_id == course_id, Submission.student_id == e.student_id)
+            .all()
+        )
+        scores = [s.score for s in subs if s.score is not None]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+
+        roster.append({
+            "student_id": e.student_id,
+            "name": e.student.name,
+            "email": e.student.email,
+            "submissions_count": len(subs),
+            "avg_score": avg_score,
+            "enrolled_at": e.enrolled_at.isoformat(),
+        })
+
+    # Most active students first
+    roster.sort(key=lambda r: r["submissions_count"], reverse=True)
+
+    return jsonify(roster), 200
 
 
 @courses_bp.route("/<course_id>", methods=["DELETE"])
