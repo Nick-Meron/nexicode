@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from extensions import db
+from extensions import db, limiter
 from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic, Enrollment
 from services.ai_service import generate_feedback, compare_models
 from services.code_quality_scorer import score_code_quality
@@ -10,10 +10,15 @@ submissions_bp = Blueprint("submissions", __name__)
 
 @submissions_bp.route("/", methods=["POST"])
 @jwt_required()
+@limiter.limit("20 per hour")  # each call here spends real AI API money —
+                                # this caps how much one account can burn
 def submit_code():
     """Student submits code → AI generates feedback immediately."""
     user_id = get_jwt_identity()    # this is just the user's ID string
     data = request.get_json()
+
+    if not data or not data.get("question_id") or not data.get("code_submitted"):
+        return jsonify({"error": "question_id and code_submitted are required"}), 400
 
     question = Question.query.get(data.get("question_id"))
     if not question:
@@ -40,12 +45,19 @@ def submit_code():
     db.session.flush()  # get submission.id before commit
 
     # 2. Generate feedback via active AI model
-    fb_result = generate_feedback(
-        question_text=question.question_text,
-        code_submitted=data["code_submitted"],
-        learning_outcomes=topic.learning_outcomes,
-        marking_rubric=topic.marking_rubric,
-    )
+    try:
+        fb_result = generate_feedback(
+            question_text=question.question_text,
+            code_submitted=data["code_submitted"],
+            learning_outcomes=topic.learning_outcomes,
+            marking_rubric=topic.marking_rubric,
+        )
+    except Exception:
+        db.session.rollback()
+        return jsonify({
+            "error": "The AI feedback service is temporarily unavailable. Please try again shortly."
+        }), 503
+
     submission.score = fb_result["score"]
     quality_result = score_code_quality(data["code_submitted"])
 
@@ -67,6 +79,7 @@ def submit_code():
 
 @submissions_bp.route("/<submission_id>/compare", methods=["POST"])
 @jwt_required()
+@limiter.limit("10 per hour")  # this one calls up to 3 AI models at once
 def compare_all_models(submission_id):
     """Run the submission through all 3 AI models for comparison."""
     submission = Submission.query.get(submission_id)
