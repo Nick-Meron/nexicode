@@ -336,12 +336,16 @@ def _call_deepseek(prompt: str) -> str:
 
 
 def _extract_score(text: str) -> int:
-    """Extract the SCORE: N value from AI response. Returns 0 if not found."""
-    match = re.search(r"SCORE:\s*(\d+)", text, re.IGNORECASE)
-    if match:
-        score = int(match.group(1))
-        return max(1, min(10, score))  # clamp between 1 and 10
-    return 0
+    """Extract and validate SCORE: N or SCORE: [N] from an AI response."""
+    matches = re.findall(r"SCORE:\s*\[?\s*(\d+)\s*\]?", text, re.IGNORECASE)
+    if not matches:
+        raise ValueError("AI response did not contain a valid SCORE value.")
+
+    score = int(matches[-1])
+    if not 1 <= score <= 10:
+        raise ValueError("AI score must be between 1 and 10.")
+
+    return score
 
 
 def _evaluate_feedback_quality(feedback_text: str, learning_outcomes: str) -> dict:
