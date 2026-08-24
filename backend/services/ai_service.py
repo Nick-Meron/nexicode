@@ -3,7 +3,7 @@ services/ai_service.py
 
 Central AI service for NEXICODE.
 All feedback is scored 1–10 using the gold standard marking rubric.
-Supports: Anthropic Claude, OpenAI GPT-4o, DeepSeek.
+Supports: Anthropic Claude, OpenAI GPT, DeepSeek.
 """
 import os
 import re
@@ -13,6 +13,10 @@ import openai
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "")
 DEEPSEEK_API_KEY  = os.getenv("DEEPSEEK_API_KEY", "")
+
+ANTHROPIC_MODEL   = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
+OPENAI_MODEL      = os.getenv("OPENAI_MODEL", "gpt-5.6")
+DEEPSEEK_MODEL    = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 ACTIVE_MODEL      = os.getenv("ACTIVE_MODEL", "claude")
 
 # ── Gold Standard Marking Rubric ─────────────────────────────────────────────
@@ -282,9 +286,12 @@ def _call_model(model: str, prompt: str) -> str:
 
 
 def _call_claude(prompt: str) -> str:
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY is not configured.")
+
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     message = client.messages.create(
-        model="claude-sonnet-4-5",
+        model=ANTHROPIC_MODEL,
         max_tokens=1200,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -292,25 +299,39 @@ def _call_claude(prompt: str) -> str:
 
 
 def _call_openai(prompt: str) -> str:
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY is not configured.")
+
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1200,
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=prompt,
     )
-    return response.choices[0].message.content.strip()
+
+    if not response.output_text:
+        raise ValueError("OpenAI returned an empty response.")
+
+    return response.output_text.strip()
 
 
 def _call_deepseek(prompt: str) -> str:
+    if not DEEPSEEK_API_KEY:
+        raise ValueError("DEEPSEEK_API_KEY is not configured.")
+
     client = openai.OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url="https://api.deepseek.com",
     )
     response = client.chat.completions.create(
-        model="deepseek-coder",
+        model=DEEPSEEK_MODEL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1200,
+        extra_body={"thinking": {"type": "disabled"}},
     )
+
+    if not response.choices or not response.choices[0].message.content:
+        raise ValueError("DeepSeek returned an empty response.")
+
     return response.choices[0].message.content.strip()
 
 

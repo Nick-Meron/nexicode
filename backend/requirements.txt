@@ -7,7 +7,7 @@ flask-migrate==4.0.7
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 werkzeug==3.0.3
-openai==1.35.0
-anthropic==0.28.0
+openai>=1.101.0,<3.0.0
+anthropic>=0.67.0,<1.0.0
 pytest==8.3.2
 pytest-flask==1.3.0

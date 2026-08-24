@@ -27,7 +27,7 @@ from extensions import db
 from models import Question, GoldAnswer, Evaluation
 from services.ai_service import grade_gold_answer, ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY
 
-MODELS_TO_RUN = ["claude"]  # add "gpt", "deepseek" back in once those API keys have credit
+MODELS_TO_RUN = ["claude", "gpt", "deepseek"]
 
 REQUIRED_KEYS = {
     "claude": ANTHROPIC_API_KEY,
