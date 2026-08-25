@@ -1,17 +1,51 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
-import { getCourses, getTopics, getTopicQuestions, submitCode, getProgress, leaveCourse, changePassword } from "../api";
+import { useAuth } from "../context/useAuth";
+import { courseTheme } from "../utils/courseTheme";
+import { parseFeedback, renderInlineBold } from "../utils/parseFeedback";
+import { getCourses, joinCourse, getTopics, getTopicQuestions, submitCode, getProgress, leaveCourse, changePassword } from "../api";
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, ChartIcon, BookIcon, ArrowRightIcon, LogoutIcon, SettingsIcon,
-  SchoolIcon, LayersIcon, SearchIcon, ClipboardIcon, TrophyIcon, TrendIcon,
+  TargetIcon,
+  SchoolIcon, LayersIcon, SearchIcon, ClipboardIcon, TrendIcon,
 } from "../components/Icons";
+
+function ProgressRing({ score, size = 140, strokeWidth = 12, color }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(10, score ?? 0));
+  const offset = circumference * (1 - clamped / 10);
+
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#eef1f8" strokeWidth={strokeWidth} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none"
+          stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          style={{ transition: "stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)" }}
+        />
+      </svg>
+      <div style={{
+        position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+      }}>
+        <span style={{ fontSize: size * 0.26, fontWeight: 800, color, fontFamily: "var(--font-mono)", lineHeight: 1 }}>{clamped}</span>
+        <span style={{ fontSize: Math.max(size * 0.09, 9), color: "var(--text-mute)", fontWeight: 600, marginTop: 2 }}>/ 10</span>
+      </div>
+    </div>
+  );
+}
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
   const [tab, setTab]               = useState("questions");
   const [courses, setCourses]       = useState([]);
   const [topicCounts, setTopicCounts] = useState({});
+  const [joinCode, setJoinCode]     = useState("");
+  const [joining, setJoining]       = useState(false);
+  const [joinError, setJoinError]   = useState("");
   const [selectedCourse, setSelectedCourse]     = useState(null);
   const [questions, setQuestions]   = useState([]);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
@@ -44,6 +78,24 @@ useEffect(() => {
   });
   getProgress(user.id).then((r) => setProgress(r.data));
 }, [user.id]);
+
+  const handleJoinCourse = async (e) => {
+    e.preventDefault();
+    if (!joinCode.trim()) return;
+    setJoining(true);
+    setJoinError("");
+    try {
+      await joinCourse(joinCode.trim());
+      const r = await getCourses();
+      setCourses(r.data);
+      loadTopicCounts(r.data);
+      setJoinCode("");
+    } catch (err) {
+      setJoinError(err.response?.data?.error || "Couldn't join that course");
+    } finally {
+      setJoining(false);
+    }
+  };
 
   const handleLeaveCourse = async (e, courseId) => {
     e.stopPropagation();
@@ -162,6 +214,24 @@ useEffect(() => {
               </div>
             </div>
 
+            {/* Join a course by module code — replaces browsing a full
+                catalog now that the backend only returns courses the
+                student is actually enrolled in. */}
+            <form className="nx-card" onSubmit={handleJoinCourse}
+                  style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 20, padding: 16 }}>
+              <input
+                className="nx-input"
+                style={{ flex: 1 }}
+                placeholder="Enter a module code to join a course (e.g. CIS101)"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+              />
+              <button className="nx-btn" type="submit" disabled={joining || !joinCode.trim()}>
+                {joining ? "Joining…" : "Join Course"}
+              </button>
+            </form>
+            {joinError && <p style={{ color: "var(--red)", fontSize: 13, marginTop: -12, marginBottom: 16 }}>{joinError}</p>}
+
             {/* Course cards */}
             {courses.length === 0 ? (
               <div className="nx-empty-state">
@@ -177,7 +247,7 @@ useEffect(() => {
                   return (
                     <div
                       key={c.id}
-                      className={`nx-course-card ${selectedCourse?.id === c.id ? "active" : ""}`}
+                      className={`nx-course-card nx-course-theme-${courseTheme(c)} ${selectedCourse?.id === c.id ? "active" : ""}`}
                       onClick={() => handleSelectCourse(c)}>
                       <div className="nx-course-top">
                         <span className="nx-course-icon"><BookIcon width="20" height="20" /></span>
@@ -246,7 +316,7 @@ useEffect(() => {
                           className="nx-code-area"
                           value={code}
                           onChange={(e) => setCode(e.target.value)}
-                          placeholder="# Write your Python code here..."
+                          placeholder="// Write your JavaScript code here..."
                           spellCheck={false}
                         />
                         <button className="nx-btn" onClick={handleSubmit} disabled={submitting || !code.trim()}>
@@ -254,18 +324,50 @@ useEffect(() => {
                         </button>
                       </div>
 
-                      {feedback && (
-                        <div className="nx-card nx-feedback-card">
-                          <div className="nx-feedback-header">
-                            <h3 className="nx-card-title" style={{ margin: 0 }}>AI Feedback</h3>
-                            <div className="nx-score-badge" style={{ background: scoreColor(feedback.score) }}>
-                              {feedback.score ?? 0} / 10
+                      {feedback && (() => {
+                        const { sections, summary } = parseFeedback(feedback.feedback_text);
+                        const sectionIcons = [TargetIcon, CodeIcon, SchoolIcon, TrendIcon];
+                        return (
+                          <div className="nx-card nx-feedback-card">
+                            <div className="nx-feedback-header">
+                              <div>
+                                <h3 className="nx-card-title" style={{ margin: 0 }}>AI Feedback</h3>
+                                <p className="nx-model-tag" style={{ margin: "4px 0 0" }}>Generated by: {feedback.ai_model_used}</p>
+                              </div>
+                              <div className="nx-score-circle" style={{ borderColor: scoreColor(feedback.score) }}>
+                                <span className="nx-score-circle-num" style={{ color: scoreColor(feedback.score) }}>
+                                  {feedback.score ?? 0}
+                                </span>
+                                <span className="nx-score-circle-den">/ 10</span>
+                              </div>
                             </div>
+
+                            <div className="nx-feedback-sections">
+                              {sections.map((s, i) => {
+                                const Icon = sectionIcons[i] || TargetIcon;
+                                return (
+                                  <div className="nx-feedback-section" key={i}>
+                                    <div className="nx-feedback-section-title">
+                                      <Icon width="15" height="15" /> {s.title}
+                                    </div>
+                                    <p className="nx-feedback-section-body">{s.body}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {summary && (
+                              <div className="nx-feedback-summary">
+                                {summary.split("\n").map((line, i) => (
+                                  <p key={i} style={{ margin: i === 0 ? "0 0 6px" : 0 }}>
+                                    {renderInlineBold(line)}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <p className="nx-model-tag">Generated by: {feedback.ai_model_used}</p>
-                          <pre className="nx-feedback-text">{feedback.feedback_text}</pre>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </>
                   )}
                 </div>
@@ -287,12 +389,39 @@ useEffect(() => {
 
             {progress && (
               <>
-                <div className="nx-stats-grid">
-                  <StatCard icon={<ClipboardIcon width="18" height="18" />} label="Total Submissions" value={progress.report?.submissions_count ?? 0} />
-                  <StatCard icon={<TrophyIcon width="18" height="18" />} label="Average Score" value={`${progress.report?.avg_score ?? 0} / 10`} accent />
-                  <StatCard icon={<TrendIcon width="18" height="18" />} label="Strengths" value={progress.report?.strengths ?? "Complete more submissions"} small />
-                  <StatCard icon={<ChartIcon width="18" height="18" />} label="Areas to Improve" value={progress.report?.weaknesses ?? "Complete more submissions"} small />
+                {progress.trend && progress.trend.direction !== "not_enough_data" && (
+                  <div className={`nx-trend-banner nx-trend-${progress.trend.direction}`}>
+                    {progress.trend.direction === "up" && <TrendIcon width="16" height="16" />}
+                    {progress.trend.label}
+                  </div>
+                )}
+
+                <div className="nx-hero-row">
+                  <div className="nx-card nx-hero-ring-card">
+                    <ProgressRing score={progress.report?.avg_score ?? 0} size={140} strokeWidth={14} color={scoreColor(progress.report?.avg_score ?? 0)} />
+                    <p className="nx-hero-ring-label">Average Score</p>
+                  </div>
+                  <div className="nx-stats-grid nx-stats-grid-compact">
+                    <StatCard icon={<ClipboardIcon width="18" height="18" />} label="Total Submissions" value={progress.report?.submissions_count ?? 0} />
+                    <StatCard icon={<TrendIcon width="18" height="18" />} label="Strengths" value={progress.report?.strengths ?? "Complete more submissions"} small />
+                    <StatCard icon={<ChartIcon width="18" height="18" />} label="Areas to Improve" value={progress.report?.weaknesses ?? "Complete more submissions"} small />
+                  </div>
                 </div>
+
+                {progress.topic_breakdown?.length > 0 && (
+                  <div className="nx-card nx-trend-card" style={{ marginBottom: 20 }}>
+                    <h3 className="nx-card-title">By Topic</h3>
+                    <div className="nx-topic-ring-row">
+                      {progress.topic_breakdown.map((t) => (
+                        <div key={t.topic} className="nx-topic-ring-item">
+                          <ProgressRing score={t.avg_score} size={72} strokeWidth={7} color={scoreColor(t.avg_score)} />
+                          <p className="nx-topic-ring-label" title={t.topic}>{t.topic}</p>
+                          <p className="nx-topic-ring-count">{t.count} submission{t.count !== 1 ? "s" : ""}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="nx-card nx-trend-card">
                   <h3 className="nx-card-title">Score History</h3>
@@ -300,7 +429,7 @@ useEffect(() => {
                     <div>
                       {progress.score_trend.map((s_) => (
                         <div key={s_.index} className="nx-bar-row">
-                          <span className="nx-bar-label">#{s_.index}</span>
+                          <span className="nx-bar-label" title={s_.topic}>#{s_.index}</span>
                           <div className="nx-bar-track">
                             <div className="nx-bar-fill" style={{ width: `${s_.score * 10}%`, background: scoreColor(s_.score) }} />
                           </div>

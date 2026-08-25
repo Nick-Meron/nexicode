@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
-import { getCourses, createCourse, updateCourse, deleteCourse, getTopics, createTopic, updateTopic, generateQuestion, getTopicQuestions, getCourseStudents } from "../api";
+import { useAuth } from "../context/useAuth";
+import { courseTheme } from "../utils/courseTheme";
+import { getCourses, createCourse, updateCourse, deleteCourse, getTopics, createTopic, updateTopic, generateQuestion, getTopicQuestions, getCourseStudents, changePassword } from "../api";
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, BookIcon, PlusIcon, TrashIcon, SparkIcon,
-  ArrowRightIcon, LogoutIcon, SchoolIcon, LayersIcon, SearchIcon, PeopleIcon,
+  ArrowRightIcon, LogoutIcon, SchoolIcon, LayersIcon, SearchIcon, PeopleIcon, SettingsIcon,
 } from "../components/Icons";
 
 export default function TutorDashboard() {
@@ -19,6 +20,11 @@ export default function TutorDashboard() {
   const [courseSearch, setCourseSearch] = useState("");
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [topicCounts, setTopicCounts] = useState({});
+  const [studentCounts, setStudentCounts] = useState({});
+  const [courseToDelete, setCourseToDelete] = useState(null);
+  const [deletingCourse, setDeletingCourse] = useState(false);
+  const [pwForm, setPwForm] = useState({ current_password: "", new_password: "" });
+  const [pwMessage, setPwMessage] = useState(null);
   const [rosterCourse, setRosterCourse] = useState(null);
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
@@ -45,10 +51,25 @@ export default function TutorDashboard() {
     setTopicCounts(Object.fromEntries(entries));
   };
 
+  const loadStudentCounts = async (courseList) => {
+    const entries = await Promise.all(
+      courseList.map(async (c) => {
+        try {
+          const r = await getCourseStudents(c.id);
+          return [c.id, r.data.length];
+        } catch {
+          return [c.id, 0];
+        }
+      })
+    );
+    setStudentCounts(Object.fromEntries(entries));
+  };
+
   useEffect(() => {
     getCourses().then((r) => {
       setCourses(r.data);
       loadTopicCounts(r.data);
+      loadStudentCounts(r.data);
     });
   }, []);
 
@@ -81,14 +102,38 @@ export default function TutorDashboard() {
     setEditingCourseId(null);
   };
 
-  const handleDeleteCourse = async (e, courseId) => {
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPwMessage(null);
+    try {
+      await changePassword(pwForm);
+      setPwMessage({ type: "success", text: "Password updated successfully." });
+      setPwForm({ current_password: "", new_password: "" });
+    } catch (err) {
+      setPwMessage({ type: "error", text: err.response?.data?.error || "Could not update password." });
+    }
+  };
+
+  const handleDeleteCourse = (e, course) => {
     e.stopPropagation(); // prevent triggering handleSelectCourse when clicking delete
-    if (!window.confirm("Delete this course? This cannot be undone.")) return;
-    await deleteCourse(courseId);
-    setCourses(courses.filter((c) => c.id !== courseId));
-    if (selectedCourse?.id === courseId) {
-      setSelectedCourse(null);
-      setTopics([]);
+    setCourseToDelete(course);
+  };
+
+  const confirmDeleteCourse = async () => {
+    const courseId = courseToDelete.id;
+    setDeletingCourse(true);
+    try {
+      await deleteCourse(courseId);
+      setCourses((prev) => prev.filter((c) => c.id !== courseId));
+      if (selectedCourse?.id === courseId) {
+        setSelectedCourse(null);
+        setTopics([]);
+      }
+      setCourseToDelete(null);
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to delete course");
+    } finally {
+      setDeletingCourse(false);
     }
   };
 
@@ -190,7 +235,10 @@ export default function TutorDashboard() {
             </button>
           </nav>
         </div>
-        <button className="nx-logout-btn" onClick={logout}><LogoutIcon /> Sign out</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <button className="nx-logout-btn" onClick={() => setTab("account")}><SettingsIcon /> Account</button>
+          <button className="nx-logout-btn" onClick={logout}><LogoutIcon /> Sign out</button>
+        </div>
       </aside>
 
       {/* Main */}
@@ -233,7 +281,7 @@ export default function TutorDashboard() {
                         <label className="nx-label">Course title</label>
                         <input
                           className="nx-input"
-                          placeholder="e.g. Introduction to Python"
+                          placeholder="e.g. Introduction to JavaScript"
                           value={newCourse.title}
                           onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
                           required
@@ -274,10 +322,11 @@ export default function TutorDashboard() {
                     <div className="nx-course-grid">
                       {filtered.map((c) => {
                         const lessons = topicCounts[c.id] ?? 0;
+                        const students = studentCounts[c.id] ?? 0;
                         return (
                           <div
                             key={c.id}
-                            className={`nx-course-card ${selectedCourse?.id === c.id ? "active" : ""}`}
+                            className={`nx-course-card nx-course-theme-${courseTheme(c)} ${selectedCourse?.id === c.id ? "active" : ""}`}
                             onClick={() => { if (editingCourseId !== c.id) { handleSelectCourse(c); setTab("questions"); } }}>
                             {editingCourseId === c.id ? (
                               <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -304,7 +353,7 @@ export default function TutorDashboard() {
                                 </div>
                                 <p className="nx-course-title">{c.title}</p>
                                 <p className="nx-course-meta">
-                                  Instructor: <strong>{user.name}</strong> · {lessons} {lessons === 1 ? "lesson" : "lessons"}
+                                  {lessons} {lessons === 1 ? "lesson" : "lessons"} · {students} {students === 1 ? "student" : "students"}
                                 </p>
                                 <div className="nx-course-footer">
                                   <div className="nx-course-updated">
@@ -325,7 +374,7 @@ export default function TutorDashboard() {
                                   </button>
                                   <button
                                     className="nx-icon-btn"
-                                    onClick={(e) => handleDeleteCourse(e, c.id)}
+                                    onClick={(e) => handleDeleteCourse(e, c)}
                                     title="Delete course">
                                     <TrashIcon />
                                   </button>
@@ -617,7 +666,76 @@ export default function TutorDashboard() {
           </div>
         )}
 
+        {tab === "account" && (
+          <div className="nx-fade nx-content">
+            <div className="nx-header">
+              <div>
+                <p className="nx-eyebrow">Settings</p>
+                <h1 className="nx-title">Account</h1>
+                <p className="nx-subtitle">Update your password.</p>
+              </div>
+            </div>
+
+            <div className="nx-card" style={{ maxWidth: 400 }}>
+              <h3 className="nx-card-title">Change Password</h3>
+              <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+                <input
+                  className="nx-input"
+                  type="password"
+                  placeholder="Current password"
+                  value={pwForm.current_password}
+                  onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })}
+                  required />
+                <input
+                  className="nx-input"
+                  type="password"
+                  placeholder="New password (min 6 characters)"
+                  value={pwForm.new_password}
+                  onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
+                  required />
+                {pwMessage && (
+                  <p style={{ color: pwMessage.type === "success" ? "green" : "crimson", fontSize: 13 }}>
+                    {pwMessage.text}
+                  </p>
+                )}
+                <button className="nx-btn" type="submit">Update Password</button>
+              </form>
+            </div>
+          </div>
+        )}
+
       </main>
+
+      {courseToDelete && (
+        <div className="nx-modal-overlay" onClick={() => !deletingCourse && setCourseToDelete(null)}>
+          <div className="nx-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="nx-modal-icon"><TrashIcon width="22" height="22" /></div>
+            <h3 className="nx-modal-title">Delete this course?</h3>
+            <p className="nx-modal-body">
+              You're about to permanently delete <span className="nx-modal-target">{courseToDelete.title}</span> ({courseToDelete.module_code}).
+            </p>
+            <div className="nx-modal-warning">
+              This removes all syllabus topics, questions, submissions, feedback, and enrolments for this course. This cannot be undone.
+            </div>
+            <div className="nx-modal-actions">
+              <button
+                className="nx-btn nx-btn-ghost"
+                onClick={() => setCourseToDelete(null)}
+                disabled={deletingCourse}>
+                Cancel
+              </button>
+              <button
+                className="nx-btn"
+                style={{ background: "var(--red)", color: "#fff" }}
+                onClick={confirmDeleteCourse}
+                disabled={deletingCourse}>
+                {deletingCourse ? "Deleting…" : "Delete Course"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

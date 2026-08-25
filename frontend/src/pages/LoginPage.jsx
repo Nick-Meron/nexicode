@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { login } from "../api";
-import { useAuth } from "../context/AuthContext";
+import { login, googleLogin } from "../api";
+import { useAuth } from "../context/useAuth";
 import codingImg from "../assets/coding.svg";
 
 export default function LoginPage() {
@@ -10,6 +10,54 @@ export default function LoginPage() {
   const [form, setForm]       = useState({ email: "", password: "" });
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
+  const googleBtnRef = useRef(null);
+
+  // Render Google's own Sign In button once its script (loaded in
+  // index.html) has initialised. Google, not us, renders the actual
+  // button UI — we only supply where it goes and what to do with the
+  // credential it hands back.
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    let cancelled = false;
+
+    const setup = () => {
+      if (cancelled || !googleBtnRef.current) return;
+      // Google's script loads with `async defer`, so it may not be
+      // ready the instant this component mounts. Poll briefly instead
+      // of checking once, so the button doesn't just silently fail
+      // to appear on a slow connection.
+      if (!window.google) {
+        setTimeout(setup, 100);
+        return;
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async ({ credential }) => {
+          setError("");
+          try {
+            const res = await googleLogin(credential);
+            loginUser(res.data.token, res.data.user);
+            navigate(res.data.user.role === "tutor" ? "/tutor" : "/student");
+          } catch (err) {
+            setError(err.response?.data?.error || "Google sign-in failed");
+          }
+        },
+      });
+
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 400,
+        text: "continue_with",
+      });
+    };
+
+    setup();
+    return () => { cancelled = true; };
+  }, [loginUser, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -75,6 +123,14 @@ export default function LoginPage() {
             </button>
           </form>
 
+          <div style={s.divider}>
+            <span style={s.dividerLine} />
+            <span style={s.dividerText}>or</span>
+            <span style={s.dividerLine} />
+          </div>
+
+          <div ref={googleBtnRef} style={s.googleBtnWrap} />
+
           <p style={s.footer}>
             Don't have an account? <Link to="/register">Create one here</Link>
           </p>
@@ -110,4 +166,8 @@ const s = {
   btn:          { width: "100%", padding: "12px 0", background: BLUE, color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, marginTop: 4, boxShadow: "0 4px 16px rgba(14,165,233,0.3)" },
   error:        { background: "#fef2f2", color: "#dc2626", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #fecaca" },
   footer:       { textAlign: "center", marginTop: 16, fontSize: 13, color: "#64748b" },
+  divider:      { display: "flex", alignItems: "center", gap: 12, margin: "20px 0" },
+  dividerLine:  { flex: 1, height: 1, background: "#e2e8f0" },
+  dividerText:  { fontSize: 12, color: "#94a3b8", fontWeight: 600 },
+  googleBtnWrap:{ display: "flex", justifyContent: "center" },
 };

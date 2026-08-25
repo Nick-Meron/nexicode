@@ -4,6 +4,7 @@ from extensions import db, limiter
 from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic, Enrollment
 from services.ai_service import generate_feedback, compare_models
 from services.code_quality_scorer import score_code_quality
+from routes.courses import GOLD_STANDARD_TUTOR_EMAIL
 
 submissions_bp = Blueprint("submissions", __name__)
 
@@ -25,6 +26,9 @@ def submit_code():
         return jsonify({"error": "Question not found"}), 404
 
     topic = SyllabusTopic.query.get(question.topic_id)
+
+    if topic.course.tutor and topic.course.tutor.email == GOLD_STANDARD_TUTOR_EMAIL:
+        return jsonify({"error": "This question bank is reserved for internal evaluation and does not accept student submissions"}), 403
 
     # Enroll the student in this course if this is their first submission
     # to it. Safe to call every time — does nothing if already enrolled.

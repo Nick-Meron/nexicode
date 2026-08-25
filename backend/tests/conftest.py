@@ -5,8 +5,7 @@ WHAT THIS DOES: creates a throwaway Flask app + SQLite in-memory database
 for every test run, so tests never touch your real PostgreSQL database.
 Each test function gets a clean, empty database.
 """
-# pyright: reportMissingImports=false
-import pytest  # type: ignore[import-not-found]
+import pytest
 import sys
 import os
 

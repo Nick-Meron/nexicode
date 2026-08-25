@@ -20,6 +20,8 @@
   --amber-light: #fef3c7;
   --red:         #ef4444;
   --red-light:   #fee2e2;
+  --violet:      #8b5cf6;
+  --violet-light:#ede9fe;
 
   --bg:          #f3f6fb;
   --surface:     #ffffff;
@@ -40,6 +42,42 @@
   --font-sans:   'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono:   'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
+
+/* ---------- confirm modal ---------- */
+
+.nx-modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(16,16,29,0.55);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  animation: nx-fade-in 0.15s ease-out;
+}
+.nx-modal-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 400px; max-width: 90vw;
+  padding: 28px;
+  animation: nx-modal-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nx-modal-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--red-light); color: var(--red);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 16px;
+}
+.nx-modal-title { font-size: 17px; font-weight: 800; color: var(--text); margin: 0 0 8px; }
+.nx-modal-body  { font-size: 14px; color: var(--text-soft); line-height: 1.5; margin: 0 0 8px; }
+.nx-modal-target { font-weight: 700; color: var(--text); }
+.nx-modal-warning {
+  font-size: 12.5px; color: var(--red); background: var(--red-light);
+  border-radius: var(--radius-sm); padding: 8px 12px; margin: 12px 0 22px;
+  font-weight: 600;
+}
+.nx-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+@keyframes nx-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nx-modal-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 /* ---------- layout shell ---------- */
 
@@ -366,10 +404,20 @@
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 190px;
+  box-shadow: var(--shadow-xs);
 }
+.nx-course-card::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--blue), #6366f1);
+}
+.nx-course-card.nx-course-theme-green::before { background: linear-gradient(90deg, var(--mint), #16a34a); }
+.nx-course-card.nx-course-theme-violet::before { background: linear-gradient(90deg, var(--violet), #7c3aed); }
+.nx-course-card.nx-course-theme-amber::before { background: linear-gradient(90deg, var(--amber), #d97706); }
 .nx-course-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: #c7d2e8; }
 .nx-course-card.active { border-color: var(--blue); background: var(--blue-tint); box-shadow: var(--shadow-sm); }
 .nx-course-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -378,7 +426,11 @@
   background: linear-gradient(135deg, var(--blue) 0%, #6366f1 100%);
   display: flex; align-items: center; justify-content: center; color: #fff;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(14,165,233,0.25);
 }
+.nx-course-card.nx-course-theme-green .nx-course-icon { background: linear-gradient(135deg, var(--mint) 0%, #16a34a 100%); box-shadow: 0 4px 10px rgba(34,197,94,0.25); }
+.nx-course-card.nx-course-theme-violet .nx-course-icon { background: linear-gradient(135deg, var(--violet) 0%, #7c3aed 100%); box-shadow: 0 4px 10px rgba(139,92,246,0.25); }
+.nx-course-card.nx-course-theme-amber .nx-course-icon { background: linear-gradient(135deg, var(--amber) 0%, #d97706 100%); box-shadow: 0 4px 10px rgba(245,158,11,0.25); }
 .nx-module-code { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--blue-dark); background: var(--blue-light); padding: 4px 10px; border-radius: 999px; }
 .nx-course-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 0 0 8px; line-height: 1.35; }
 .nx-course-meta { font-size: 12.5px; color: var(--text-mute); margin: 0 0 auto; line-height: 1.6; }
@@ -387,8 +439,8 @@
 .nx-course-updated { display: flex; align-items: center; gap: 8px; }
 .nx-course-mini-avatar {
   width: 26px; height: 26px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--blue) 0%, #6366f1 100%);
-  color: #fff; font-size: 11px; font-weight: 700;
+  background: var(--bg); border: 1.5px solid var(--border);
+  color: var(--text-soft); font-size: 11px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .nx-course-updated-text { font-size: 11px; color: var(--text-mute); font-weight: 500; }
@@ -477,18 +529,81 @@
   resize: vertical;
   margin-bottom: 12px;
   outline: none;
+  color-scheme: dark;
+  forced-color-adjust: none;
 }
 .nx-code-area::placeholder { color: #5c6485; }
-.nx-code-area:focus { border-color: var(--blue); }
+.nx-code-area:focus { border-color: var(--blue); background: var(--navy); }
+.nx-code-area::selection { background: var(--blue); color: #ffffff; }
+.nx-code-area::-moz-selection { background: var(--blue); color: #ffffff; }
+
+/* Some browsers force a white background + black text onto a textarea
+   the instant they think it might be an autofillable/sensitive field —
+   often triggered by pasting. This overrides that so the code editor
+   stays on-theme regardless of what the browser tries to do. */
+.nx-code-area:-webkit-autofill,
+.nx-code-area:-webkit-autofill:hover,
+.nx-code-area:-webkit-autofill:focus {
+  -webkit-text-fill-color: #d7ecff !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--navy) inset !important;
+  box-shadow: 0 0 0px 1000px var(--navy) inset !important;
+  caret-color: #d7ecff;
+  transition: background-color 9999s ease-in-out 0s;
+}
 
 .nx-feedback-card { border: 1.5px solid var(--blue); }
-.nx-feedback-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.nx-score-badge { padding: 5px 15px; border-radius: 999px; color: #fff; font-size: 13px; font-weight: 800; font-family: var(--font-mono); }
-.nx-model-tag { font-size: 11px; color: var(--text-mute); margin: 0 0 12px; font-family: var(--font-mono); }
-.nx-feedback-text { font-size: 13.5px; line-height: 1.8; color: var(--text-soft); white-space: pre-wrap; margin: 0; }
+.nx-feedback-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; gap: 16px; }
+.nx-model-tag { font-size: 11px; color: var(--text-mute); font-family: var(--font-mono); }
+
+.nx-score-circle {
+  width: 68px; height: 68px; border-radius: 50%;
+  border: 3px solid;
+  background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.nx-score-circle-num { font-size: 22px; font-weight: 800; font-family: var(--font-mono); line-height: 1; }
+.nx-score-circle-den { font-size: 10px; color: var(--text-mute); font-weight: 600; margin-top: 1px; }
+
+.nx-feedback-sections { display: flex; flex-direction: column; gap: 16px; }
+.nx-feedback-section { border-left: 3px solid var(--blue-light); padding-left: 14px; }
+.nx-feedback-section-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 700; color: var(--blue-dark);
+  margin-bottom: 6px;
+}
+.nx-feedback-section-body {
+  font-family: var(--font-sans);
+  font-size: 14px; line-height: 1.7; color: var(--text-soft);
+  margin: 0; white-space: pre-wrap;
+}
+
+.nx-feedback-summary {
+  margin-top: 18px; padding: 14px 16px;
+  background: var(--blue-tint); border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: 13.5px; color: var(--text);
+  line-height: 1.6;
+}
 
 /* ---------- stat cards ---------- */
 .nx-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 24px; }
+
+.nx-hero-row { display: flex; gap: 20px; align-items: stretch; margin-bottom: 20px; }
+.nx-hero-ring-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 24px; flex-shrink: 0;
+}
+.nx-hero-ring-label { font-size: 13px; font-weight: 700; color: var(--text-soft); margin: 0; }
+.nx-stats-grid-compact { flex: 1; margin-bottom: 0; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+.nx-topic-ring-row { display: flex; flex-wrap: wrap; gap: 24px; padding-top: 4px; }
+.nx-topic-ring-item { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100px; }
+.nx-topic-ring-label {
+  font-size: 12px; font-weight: 700; color: var(--text-soft); text-align: center;
+  margin: 0; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.nx-topic-ring-count { font-size: 10.5px; color: var(--text-mute); margin: 0; }
 .nx-stat-card {
   background: var(--surface);
   border: 1.5px solid var(--border);
@@ -520,9 +635,19 @@
 .nx-bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 11px; }
 .nx-bar-row:last-child { margin-bottom: 0; }
 .nx-bar-label { width: 26px; font-size: 11.5px; color: var(--text-mute); font-family: var(--font-mono); flex-shrink: 0; }
+.nx-bar-label-wide { width: 150px; font-family: var(--font-sans); font-weight: 600; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nx-bar-track { flex: 1; height: 9px; background: #eef1f8; border-radius: 5px; overflow: hidden; }
 .nx-bar-fill { height: 100%; border-radius: 5px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
 .nx-bar-score { width: 30px; font-size: 12.5px; font-weight: 700; text-align: right; font-family: var(--font-mono); flex-shrink: 0; }
+
+.nx-trend-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-radius: var(--radius-sm);
+  font-size: 13.5px; font-weight: 600; margin-bottom: 20px;
+}
+.nx-trend-up      { background: var(--mint-light); color: #15803d; }
+.nx-trend-down    { background: var(--red-light);  color: #b91c1c; }
+.nx-trend-steady  { background: var(--blue-tint);  color: var(--blue-dark); }
 
 /* ---------- generate card (tutor) ---------- */
 .nx-gen-card { background: linear-gradient(135deg, #14142b 0%, #1c1c3f 100%); border: none; color: #fff; }

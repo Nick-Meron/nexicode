@@ -5,6 +5,11 @@ from models import Course, SyllabusTopic, User, Enrollment, Submission, Question
 
 courses_bp = Blueprint("courses", __name__)
 
+# Must match GOLD_TUTOR_EMAIL in seed_gold_standard.py. Any course owned by
+# this reserved account is the internal blind-evaluation question bank
+# (Section 3.5) and must never be visible or joinable by real students.
+GOLD_STANDARD_TUTOR_EMAIL = "gold-standard@nexicode.local"
+
 
 # ── Courses ──────────────────────────────────────────────────────────────────
 
@@ -16,8 +21,53 @@ def list_courses():
     if user.role == "tutor":
         courses = Course.query.filter_by(tutor_id=user_id).all()
     else:
-        courses = Course.query.all()
+        # Students only ever see courses they're actually enrolled in —
+        # never a full catalog of every tutor's courses. The gold-standard
+        # evaluation course is excluded outright even if a stale enrollment
+        # record exists for it (defence in depth, not just filtered here).
+        courses = (
+            Course.query
+            .join(Enrollment, Enrollment.course_id == Course.id)
+            .join(User, User.id == Course.tutor_id)
+            .filter(Enrollment.student_id == user_id)
+            .filter(User.email != GOLD_STANDARD_TUTOR_EMAIL)
+            .all()
+        )
     return jsonify([c.to_dict() for c in courses]), 200
+
+
+@courses_bp.route("/join", methods=["POST"])
+@jwt_required()
+def join_course():
+    """Student enrolment by module code, like a classroom join code —
+    replaces browsing a full course catalog, and is the only way a
+    student can newly discover a course now that list_courses() is
+    scoped to existing enrolments."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "student":
+        return jsonify({"error": "Only students can join a course this way"}), 403
+
+    data = request.get_json() or {}
+    module_code = data.get("module_code", "").strip()
+    if not module_code:
+        return jsonify({"error": "module_code is required"}), 400
+
+    course = Course.query.filter(
+        db.func.lower(Course.module_code) == module_code.lower()
+    ).first()
+    if not course:
+        return jsonify({"error": "No course found with that module code"}), 404
+
+    if course.tutor and course.tutor.email == GOLD_STANDARD_TUTOR_EMAIL:
+        return jsonify({"error": "This course is reserved for internal evaluation and cannot be joined"}), 403
+
+    already_enrolled = Enrollment.query.filter_by(student_id=user_id, course_id=course.id).first()
+    if not already_enrolled:
+        db.session.add(Enrollment(student_id=user_id, course_id=course.id))
+        db.session.commit()
+
+    return jsonify(course.to_dict()), 200
 
 
 @courses_bp.route("/", methods=["POST"])
@@ -205,7 +255,29 @@ def delete_course(course_id):
     if course.tutor_id != user_id:
         return jsonify({"error": "You can only delete your own courses"}), 403
 
-    SyllabusTopic.query.filter_by(course_id=course_id).delete()
+    from models import Feedback, AIModelResult, GoldAnswer, Evaluation
+
+    topic_ids = [t.id for t in SyllabusTopic.query.filter_by(course_id=course_id).all()]
+    question_ids = [q.id for q in Question.query.filter(Question.topic_id.in_(topic_ids)).all()] if topic_ids else []
+    submission_ids = [s.id for s in Submission.query.filter(Submission.question_id.in_(question_ids)).all()] if question_ids else []
+    gold_answer_ids = [g.id for g in GoldAnswer.query.filter(GoldAnswer.question_id.in_(question_ids)).all()] if question_ids else []
+
+    # Delete from the bottom of the dependency chain upward, so no
+    # foreign key ever points at a row that's about to disappear:
+    #   Course -> SyllabusTopic -> Question -> Submission -> Feedback/AIModelResult
+    #   Course -> Enrollment
+    #   Question -> GoldAnswer -> Evaluation
+    if gold_answer_ids:
+        Evaluation.query.filter(Evaluation.gold_answer_id.in_(gold_answer_ids)).delete(synchronize_session=False)
+        GoldAnswer.query.filter(GoldAnswer.id.in_(gold_answer_ids)).delete(synchronize_session=False)
+    if submission_ids:
+        Feedback.query.filter(Feedback.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+        AIModelResult.query.filter(AIModelResult.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+        Submission.query.filter(Submission.id.in_(submission_ids)).delete(synchronize_session=False)
+    if question_ids:
+        Question.query.filter(Question.id.in_(question_ids)).delete(synchronize_session=False)
+    SyllabusTopic.query.filter_by(course_id=course_id).delete(synchronize_session=False)
+    Enrollment.query.filter_by(course_id=course_id).delete(synchronize_session=False)
     db.session.delete(course)
     db.session.commit()
 

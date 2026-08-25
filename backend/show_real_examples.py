@@ -1,17 +1,42 @@
 from app import create_app
 from extensions import db
 from models import GoldAnswer, Question, Evaluation
+from statistics import median
 
 app = create_app()
 
 with app.app_context():
-    # Just look at the first 3 gold answers, in full detail.
-    gold_answers = GoldAnswer.query.limit(3).all()
+    # Group all 100 gold answers by their syllabus topic, then pick ONE
+    # answer per topic whose gold_mark is closest to that topic's median
+    # mark — a representative example per topic, not just "the first 3
+    # answers inserted into the database". Used for the 10-topic
+    # comparison table in Section 4.3.4.
+    all_gold_answers = GoldAnswer.query.all()
 
-    for gold_answer in gold_answers:
-        question = Question.query.get(gold_answer.question_id)
+    by_topic = {}
+    for ga in all_gold_answers:
+        question = Question.query.get(ga.question_id)
+        topic_title = question.topic.topic_title
+        by_topic.setdefault(topic_title, []).append((ga, question))
 
+    selected = []
+    for topic_title, items in by_topic.items():
+        marks = [ga.gold_mark for ga, _ in items]
+        med = median(marks)
+        # Marks are evenly distributed per topic, so ties at the median
+        # (e.g. a 5 and a 6 both being 0.5 away) are expected. Break
+        # ties by gold_answer id so the result is identical every time
+        # this script is run, not dependent on database query order.
+        best_ga, best_question = min(
+            items, key=lambda pair: (abs(pair[0].gold_mark - med), pair[0].id)
+        )
+        selected.append((topic_title, best_ga, best_question))
+
+    selected.sort(key=lambda x: x[0])  # stable, readable order — alphabetical by topic
+
+    for topic_title, gold_answer, question in selected:
         print("=" * 70)
+        print(f"TOPIC: {topic_title}")
         print(f"QUESTION: {question.question_text}")
         print(f"DIFFICULTY: {question.difficulty}")
         print("-" * 70)

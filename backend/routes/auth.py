@@ -61,6 +61,58 @@ def login():
     return jsonify({'token': token, 'user': user.to_dict()}), 200
 
 
+@auth_bp.route('/google', methods=['POST'])
+@limiter.limit("10 per minute")  # same rate as password login
+def google_login():
+    """Login or auto-register via a Google ID token from the frontend's
+    Google Identity Services button. Never handles a password — the
+    account is verified by Google before we ever see it."""
+    import os
+    import secrets
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    from extensions import db
+    from models import User
+
+    data = request.get_json()
+    if not data or not data.get('credential'):
+        return jsonify({'error': 'Google credential is required'}), 400
+
+    client_id = os.getenv('GOOGLE_CLIENT_ID')
+    if not client_id:
+        # Fails loudly rather than silently accepting unverifiable tokens
+        return jsonify({'error': 'Google sign-in is not configured on this server'}), 503
+
+    try:
+        payload = google_id_token.verify_oauth2_token(
+            data['credential'], google_requests.Request(), client_id
+        )
+    except ValueError:
+        return jsonify({'error': 'Invalid or expired Google credential'}), 401
+
+    if not payload.get('email_verified', False):
+        return jsonify({'error': 'Google account email is not verified'}), 401
+
+    email = payload['email'].strip().lower()
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        # First time this Google account has signed in — create the
+        # account. It gets an unusable random password hash since it
+        # will only ever authenticate via Google, never a password.
+        user = User(
+            name=payload.get('name', email.split('@')[0]),
+            email=email,
+            password_hash=generate_password_hash(secrets.token_urlsafe(32)),
+            role='student',  # tutor accounts are provisioned separately
+        )
+        db.session.add(user)
+        db.session.commit()
+
+    token = create_access_token(identity=user.id)
+    return jsonify({'token': token, 'user': user.to_dict()}), 200
+
+
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def me():
