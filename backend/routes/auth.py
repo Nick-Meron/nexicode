@@ -138,7 +138,7 @@ def change_password():
         return jsonify({'error': 'current_password and new_password are required'}), 400
 
     if not check_password_hash(user.password_hash, data['current_password']):
-        return jsonify({'error': 'Current password is incorrect'}), 401
+        return jsonify({'error': 'Current password is incorrect'}), 403
 
     if len(data['new_password']) < 6:
         return jsonify({'error': 'New password must be at least 6 characters'}), 400
@@ -182,7 +182,7 @@ def delete_account():
         return jsonify({'error': 'password is required to confirm account deletion'}), 400
 
     if not check_password_hash(user.password_hash, data['password']):
-        return jsonify({'error': 'Incorrect password'}), 401
+        return jsonify({'error': 'Incorrect password'}), 403
 
     if user.role == 'tutor':
         owned_courses = Course.query.filter_by(tutor_id=user.id).all()
