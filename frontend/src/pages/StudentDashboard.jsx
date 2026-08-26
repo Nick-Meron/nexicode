@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/useAuth";
 import { courseTheme } from "../utils/courseTheme";
 import { parseFeedback, renderInlineBold } from "../utils/parseFeedback";
-import { getCourses, joinCourse, getTopics, getTopicQuestions, submitCode, getProgress, leaveCourse, changePassword } from "../api";
+import { getCourses, joinCourse, getTopics, getTopicQuestions, submitCode, getProgress, leaveCourse, changePassword, deleteAccount } from "../api";
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, ChartIcon, BookIcon, ArrowRightIcon, LogoutIcon, SettingsIcon,
   TargetIcon,
-  SchoolIcon, LayersIcon, SearchIcon, ClipboardIcon, TrendIcon,
+  SchoolIcon, LayersIcon, SearchIcon, ClipboardIcon, TrendIcon, TrashIcon,
 } from "../components/Icons";
 
 function ProgressRing({ score, size = 140, strokeWidth = 12, color }) {
@@ -56,6 +56,10 @@ export default function StudentDashboard() {
   const [courseSearch, setCourseSearch] = useState("");
   const [pwForm, setPwForm] = useState({ current_password: "", new_password: "" });
   const [pwMessage, setPwMessage] = useState(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState("");
 
   const loadTopicCounts = async (courseList) => {
   const entries = await Promise.all(
@@ -108,6 +112,18 @@ useEffect(() => {
       }
     } catch (err) {
       window.alert(err.response?.data?.error || "You're not enrolled in this course yet.");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteAccountError("");
+    setDeletingAccount(true);
+    try {
+      await deleteAccount(deleteAccountPassword);
+      logout(); // clears the token; PrivateRoute redirects to /login automatically
+    } catch (err) {
+      setDeleteAccountError(err.response?.data?.error || "Could not delete account");
+      setDeletingAccount(false);
     }
   };
 
@@ -481,10 +497,61 @@ useEffect(() => {
                 <button className="nx-btn" type="submit">Update Password</button>
               </form>
             </div>
+
+            <div className="nx-card" style={{ maxWidth: 400, marginTop: 20, borderColor: "var(--red-light)" }}>
+              <h3 className="nx-card-title" style={{ color: "var(--red)" }}>Danger Zone</h3>
+              <p style={{ fontSize: 13, color: "var(--text-mute)", margin: "8px 0 14px" }}>
+                Permanently delete your account and all of your submissions, feedback, and progress history. This cannot be undone.
+              </p>
+              <button
+                className="nx-btn"
+                style={{ background: "var(--red)", color: "#fff" }}
+                onClick={() => setShowDeleteAccount(true)}>
+                Delete My Account
+              </button>
+            </div>
           </div>
         )}
 
       </main>
+
+      {showDeleteAccount && (
+        <div className="nx-modal-overlay" onClick={() => !deletingAccount && setShowDeleteAccount(false)}>
+          <div className="nx-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="nx-modal-icon"><TrashIcon width="22" height="22" /></div>
+            <h3 className="nx-modal-title">Delete your account?</h3>
+            <p className="nx-modal-body">
+              This permanently deletes your account, all your code submissions, feedback, and progress history. This cannot be undone.
+            </p>
+            <input
+              className="nx-input"
+              type="password"
+              placeholder="Enter your password to confirm"
+              value={deleteAccountPassword}
+              onChange={(e) => setDeleteAccountPassword(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+            {deleteAccountError && (
+              <p style={{ color: "var(--red)", fontSize: 13, marginBottom: 10 }}>{deleteAccountError}</p>
+            )}
+            <div className="nx-modal-actions">
+              <button
+                className="nx-btn nx-btn-ghost"
+                onClick={() => { setShowDeleteAccount(false); setDeleteAccountPassword(""); setDeleteAccountError(""); }}
+                disabled={deletingAccount}>
+                Cancel
+              </button>
+              <button
+                className="nx-btn"
+                style={{ background: "var(--red)", color: "#fff" }}
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount || !deleteAccountPassword}>
+                {deletingAccount ? "Deleting…" : "Delete My Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

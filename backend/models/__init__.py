@@ -110,7 +110,7 @@ class SyllabusTopic(db.Model):
 
     topic_title = db.Column(db.String(255), nullable=False)
     learning_outcomes = db.Column(db.Text, nullable=False)
-    marking_rubric = db.Column(db.Text, nullable=False)
+    marking_rubric = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(
         db.DateTime,

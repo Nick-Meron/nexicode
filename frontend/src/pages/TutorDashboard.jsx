@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/useAuth";
 import { courseTheme } from "../utils/courseTheme";
-import { getCourses, createCourse, updateCourse, deleteCourse, getTopics, createTopic, updateTopic, generateQuestion, getTopicQuestions, getCourseStudents, changePassword } from "../api";
+import { getCourses, createCourse, updateCourse, deleteCourse, getTopics, createTopic, updateTopic, generateQuestion, deleteQuestion, getTopicQuestions, getCourseStudents, changePassword, deleteAccount } from "../api";
 import "../styles/dashboard.css";
 import {
   HexIcon, CodeIcon, BookIcon, PlusIcon, TrashIcon, SparkIcon,
@@ -25,6 +25,12 @@ export default function TutorDashboard() {
   const [deletingCourse, setDeletingCourse] = useState(false);
   const [pwForm, setPwForm] = useState({ current_password: "", new_password: "" });
   const [pwMessage, setPwMessage] = useState(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [questionToDelete, setQuestionToDelete] = useState(null);
+  const [deletingQuestion, setDeletingQuestion] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState("");
   const [rosterCourse, setRosterCourse] = useState(null);
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
@@ -102,6 +108,18 @@ export default function TutorDashboard() {
     setEditingCourseId(null);
   };
 
+  const handleDeleteAccount = async () => {
+    setDeleteAccountError("");
+    setDeletingAccount(true);
+    try {
+      await deleteAccount(deleteAccountPassword);
+      logout(); // clears the token; PrivateRoute redirects to /login automatically
+    } catch (err) {
+      setDeleteAccountError(err.response?.data?.error || "Could not delete account");
+      setDeletingAccount(false);
+    }
+  };
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setPwMessage(null);
@@ -147,10 +165,27 @@ export default function TutorDashboard() {
 
   const handleCreateTopic = async (e) => {
     e.preventDefault();
-    const res = await createTopic(selectedCourse.id, newTopic);
-    setTopics([...topics, res.data]);
-    setTopicCounts((prev) => ({ ...prev, [selectedCourse.id]: (prev[selectedCourse.id] || 0) + 1 }));
-    setNewTopic({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
+    setGenerating(true);
+    try {
+      // One combined step: create the topic, then immediately generate a
+      // question for it — matches the real workflow of a tutor typing
+      // what they taught today and getting a question straight away,
+      // instead of two separate actions.
+      const topicRes = await createTopic(selectedCourse.id, newTopic);
+      setTopics([...topics, topicRes.data]);
+      setTopicCounts((prev) => ({ ...prev, [selectedCourse.id]: (prev[selectedCourse.id] || 0) + 1 }));
+
+      const questionRes = await generateQuestion({ topic_id: topicRes.data.id, difficulty });
+
+      setNewTopic({ topic_title: "", learning_outcomes: "", marking_rubric: "" });
+      setSelectedTopic(topicRes.data);
+      setQuestions([questionRes.data]);
+      setEditingTopic(false);
+    } catch (err) {
+      alert("Couldn't finish creating the topic and question: " + (err.response?.data?.error || err.message));
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleSelectTopic = async (topic) => {
@@ -176,6 +211,19 @@ export default function TutorDashboard() {
     setTopics(topics.map((t) => (t.id === selectedTopic.id ? res.data : t)));
     setSelectedTopic(res.data);
     setEditingTopic(false);
+  };
+
+  const handleDeleteQuestion = async () => {
+    setDeletingQuestion(true);
+    try {
+      await deleteQuestion(questionToDelete.id);
+      setQuestions((prev) => prev.filter((q) => q.id !== questionToDelete.id));
+      setQuestionToDelete(null);
+    } catch (err) {
+      alert(err.response?.data?.error || "Could not delete question");
+    } finally {
+      setDeletingQuestion(false);
+    }
   };
 
   const handleGenerateQuestion = async () => {
@@ -451,7 +499,7 @@ export default function TutorDashboard() {
 
                   {/* Add topic form */}
                   <div className="nx-card" style={{ marginBottom: 24 }}>
-                    <h3 className="nx-card-title"><PlusIcon width="15" height="15" /> Add Syllabus Topic</h3>
+                    <h3 className="nx-card-title"><PlusIcon width="15" height="15" /> Add Today's Topic</h3>
                     <form onSubmit={handleCreateTopic}>
                       <div className="nx-field">
                         <label className="nx-label">Topic title</label>
@@ -464,26 +512,32 @@ export default function TutorDashboard() {
                         />
                       </div>
                       <div className="nx-field">
-                        <label className="nx-label">Learning outcomes</label>
+                        <label className="nx-label">What did you teach today?</label>
                         <textarea
                           className="nx-textarea"
-                          placeholder="Students should be able to..."
+                          placeholder="e.g. Today's lab covered writing and using for loops to iterate over arrays and print output to the console."
                           value={newTopic.learning_outcomes}
                           onChange={(e) => setNewTopic({ ...newTopic, learning_outcomes: e.target.value })}
                           required
                         />
                       </div>
                       <div className="nx-field">
-                        <label className="nx-label">Marking rubric</label>
-                        <textarea
-                          className="nx-textarea"
-                          placeholder="Correct variable naming — 30 marks..."
-                          value={newTopic.marking_rubric}
-                          onChange={(e) => setNewTopic({ ...newTopic, marking_rubric: e.target.value })}
-                          required
-                        />
+                        <label className="nx-label">Question difficulty</label>
+                        <div className="nx-diff-row">
+                          {["easy", "medium", "hard"].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              className={`nx-diff-btn ${difficulty === d ? "active" : ""}`}
+                              onClick={() => setDifficulty(d)}>
+                              {d.charAt(0).toUpperCase() + d.slice(1)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <button className="nx-btn" type="submit" style={{ width: "100%" }}>Add Topic</button>
+                      <button className="nx-btn" type="submit" style={{ width: "100%" }} disabled={generating}>
+                        {generating ? "Creating topic and generating question…" : "Add Topic & Generate Question"}
+                      </button>
                     </form>
                   </div>
 
@@ -534,11 +588,6 @@ export default function TutorDashboard() {
                           value={editTopicData.learning_outcomes}
                           onChange={(e) => setEditTopicData({ ...editTopicData, learning_outcomes: e.target.value })}
                           placeholder="Learning outcomes" />
-                        <textarea
-                          className="nx-input"
-                          value={editTopicData.marking_rubric}
-                          onChange={(e) => setEditTopicData({ ...editTopicData, marking_rubric: e.target.value })}
-                          placeholder="Marking rubric" />
                         <div style={{ display: "flex", gap: 8 }}>
                           <button className="nx-btn" onClick={handleSaveEditTopic}>Save</button>
                           <button className="nx-btn nx-btn-ghost" onClick={handleCancelEditTopic}>Cancel</button>
@@ -579,6 +628,13 @@ export default function TutorDashboard() {
                               <span className="nx-q-number">Q{i + 1}</span>
                               <span className={diffBadge(q.difficulty)}>{q.difficulty}</span>
                               <span className="nx-q-model">{q.ai_model_used}</span>
+                              <button
+                                className="nx-icon-btn-danger"
+                                title="Delete question"
+                                onClick={() => setQuestionToDelete(q)}
+                                style={{ marginLeft: "auto" }}>
+                                <TrashIcon width="14" height="14" />
+                              </button>
                             </div>
                             <p className="nx-q-text">{q.question_text}</p>
                           </div>
@@ -701,6 +757,19 @@ export default function TutorDashboard() {
                 <button className="nx-btn" type="submit">Update Password</button>
               </form>
             </div>
+
+            <div className="nx-card" style={{ maxWidth: 400, marginTop: 20, borderColor: "var(--red-light)" }}>
+              <h3 className="nx-card-title" style={{ color: "var(--red)" }}>Danger Zone</h3>
+              <p style={{ fontSize: 13, color: "var(--text-mute)", margin: "8px 0 14px" }}>
+                Permanently delete your account, all your courses, syllabus topics, questions, and student submissions belonging to them. This cannot be undone.
+              </p>
+              <button
+                className="nx-btn"
+                style={{ background: "var(--red)", color: "#fff" }}
+                onClick={() => setShowDeleteAccount(true)}>
+                Delete My Account
+              </button>
+            </div>
           </div>
         )}
 
@@ -730,6 +799,71 @@ export default function TutorDashboard() {
                 onClick={confirmDeleteCourse}
                 disabled={deletingCourse}>
                 {deletingCourse ? "Deleting…" : "Delete Course"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccount && (
+        <div className="nx-modal-overlay" onClick={() => !deletingAccount && setShowDeleteAccount(false)}>
+          <div className="nx-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="nx-modal-icon"><TrashIcon width="22" height="22" /></div>
+            <h3 className="nx-modal-title">Delete your account?</h3>
+            <p className="nx-modal-body">
+              This permanently deletes your account and every course, topic, question, and student submission that belongs to you. This cannot be undone.
+            </p>
+            <input
+              className="nx-input"
+              type="password"
+              placeholder="Enter your password to confirm"
+              value={deleteAccountPassword}
+              onChange={(e) => setDeleteAccountPassword(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+            {deleteAccountError && (
+              <p style={{ color: "var(--red)", fontSize: 13, marginBottom: 10 }}>{deleteAccountError}</p>
+            )}
+            <div className="nx-modal-actions">
+              <button
+                className="nx-btn nx-btn-ghost"
+                onClick={() => { setShowDeleteAccount(false); setDeleteAccountPassword(""); setDeleteAccountError(""); }}
+                disabled={deletingAccount}>
+                Cancel
+              </button>
+              <button
+                className="nx-btn"
+                style={{ background: "var(--red)", color: "#fff" }}
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount || !deleteAccountPassword}>
+                {deletingAccount ? "Deleting…" : "Delete My Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {questionToDelete && (
+        <div className="nx-modal-overlay" onClick={() => !deletingQuestion && setQuestionToDelete(null)}>
+          <div className="nx-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="nx-modal-icon"><TrashIcon width="22" height="22" /></div>
+            <h3 className="nx-modal-title">Delete this question?</h3>
+            <p className="nx-modal-body">
+              This permanently deletes this question along with any student submissions and feedback tied to it. This cannot be undone.
+            </p>
+            <div className="nx-modal-actions">
+              <button
+                className="nx-btn nx-btn-ghost"
+                onClick={() => setQuestionToDelete(null)}
+                disabled={deletingQuestion}>
+                Cancel
+              </button>
+              <button
+                className="nx-btn"
+                style={{ background: "var(--red)", color: "#fff" }}
+                onClick={handleDeleteQuestion}
+                disabled={deletingQuestion}>
+                {deletingQuestion ? "Deleting…" : "Delete Question"}
               </button>
             </div>
           </div>

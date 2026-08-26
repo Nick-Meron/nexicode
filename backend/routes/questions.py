@@ -85,3 +85,43 @@ def get_question(question_id):
     if not question:
         return jsonify({"error": "Not found"}), 404
     return jsonify(question.to_dict()), 200
+
+
+@questions_bp.route("/<question_id>", methods=["DELETE"])
+@jwt_required()
+def delete_question(question_id):
+    """Deletes a question and everything that depends on it:
+        Question -> Submission -> Feedback / AIModelResult
+        Question -> GoldAnswer -> Evaluation
+    Only the tutor who owns the question's course may delete it.
+    """
+    from models import Submission, Feedback, AIModelResult, GoldAnswer, Evaluation
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user or user.role != "tutor":
+        return jsonify({"error": "Tutors only"}), 403
+
+    question = Question.query.get(question_id)
+    if not question:
+        return jsonify({"error": "Question not found"}), 404
+
+    topic = SyllabusTopic.query.get(question.topic_id)
+    if not topic or topic.course.tutor_id != user_id:
+        return jsonify({"error": "You can only delete questions from your own courses"}), 403
+
+    submission_ids = [s.id for s in Submission.query.filter_by(question_id=question.id).all()]
+    if submission_ids:
+        Feedback.query.filter(Feedback.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+        AIModelResult.query.filter(AIModelResult.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+        Submission.query.filter(Submission.id.in_(submission_ids)).delete(synchronize_session=False)
+
+    gold_answer_ids = [g.id for g in GoldAnswer.query.filter_by(question_id=question.id).all()]
+    if gold_answer_ids:
+        Evaluation.query.filter(Evaluation.gold_answer_id.in_(gold_answer_ids)).delete(synchronize_session=False)
+        GoldAnswer.query.filter(GoldAnswer.id.in_(gold_answer_ids)).delete(synchronize_session=False)
+
+    db.session.delete(question)
+    db.session.commit()
+
+    return jsonify({"message": "Question deleted successfully"}), 200

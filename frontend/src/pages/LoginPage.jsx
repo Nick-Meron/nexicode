@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { login, googleLogin } from "../api";
 import { useAuth } from "../context/useAuth";
@@ -10,7 +10,17 @@ export default function LoginPage() {
   const [form, setForm]       = useState({ email: "", password: "" });
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
+  const [welcomeUser, setWelcomeUser] = useState(null);
   const googleBtnRef = useRef(null);
+
+  const redirectAfterWelcome = useCallback((token, user) => {
+    setWelcomeUser(user);
+    
+    setTimeout(() => {
+      loginUser(token, user);
+      navigate(user.role === "tutor" ? "/tutor" : "/student");
+    }, 1500);
+  }, [navigate, loginUser]);
 
   // Render Google's own Sign In button once its script (loaded in
   // index.html) has initialised. Google, not us, renders the actual
@@ -39,8 +49,7 @@ export default function LoginPage() {
           setError("");
           try {
             const res = await googleLogin(credential);
-            loginUser(res.data.token, res.data.user);
-            navigate(res.data.user.role === "tutor" ? "/tutor" : "/student");
+            redirectAfterWelcome(res.data.token, res.data.user);
           } catch (err) {
             setError(err.response?.data?.error || "Google sign-in failed");
           }
@@ -57,7 +66,7 @@ export default function LoginPage() {
 
     setup();
     return () => { cancelled = true; };
-  }, [loginUser, navigate]);
+  }, [loginUser, navigate, redirectAfterWelcome]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,17 +74,25 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(form);
-      loginUser(res.data.token, res.data.user);
-      navigate(res.data.user.role === "tutor" ? "/tutor" : "/student");
+      redirectAfterWelcome(res.data.token, res.data.user);
     } catch (err) {
       setError(err.response?.data?.error || "Login failed");
-    } finally {
       setLoading(false);
     }
   };
 
   return (
     <div style={s.page}>
+
+      {welcomeUser && (
+        <div style={s.overlay}>
+          <div style={s.toast}>
+            <span style={s.toastIcon}>👋</span>
+            <p style={s.toastTitle}>Welcome back, {welcomeUser.name?.split(" ")[0]}!</p>
+            <p style={s.toastSub}>Taking you to your dashboard…</p>
+          </div>
+        </div>
+      )}
 
       {/* Left panel — illustration */}
       <div style={s.left}>
@@ -170,4 +187,22 @@ const s = {
   dividerLine:  { flex: 1, height: 1, background: "#e2e8f0" },
   dividerText:  { fontSize: 12, color: "#94a3b8", fontWeight: 600 },
   googleBtnWrap:{ display: "flex", justifyContent: "center" },
+  overlay: {
+    position: "fixed", inset: 0, zIndex: 2000,
+    background: "rgba(16,16,29,0.45)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
+  toast: {
+    background: "#fff", borderRadius: 16, padding: "40px 36px",
+    maxWidth: 380, width: "90%", textAlign: "center",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+    animation: "nxToastIn 0.3s cubic-bezier(0.16,1,0.3,1)",
+  },
+  toastIcon: {
+    width: 72, height: 72, borderRadius: "50%", background: "#dcfce7",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 34, margin: "0 auto 20px",
+  },
+  toastTitle: { fontSize: 22, fontWeight: 800, color: "#15803d", margin: "0 0 12px" },
+  toastSub:   { fontSize: 15, color: "#64748b", margin: "4px 0" },
 };

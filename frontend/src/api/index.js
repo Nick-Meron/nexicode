@@ -32,6 +32,7 @@ export const login       = (data)       => api.post("/auth/login", data);
 export const googleLogin = (credential) => api.post("/auth/google", { credential });
 export const getMe    = ()     => api.get("/auth/me");
 export const changePassword = (data) => api.put("/auth/change-password", data);
+export const deleteAccount  = (password) => api.delete("/auth/account", { data: { password } });
 
 // ── Courses & Topics ─────────────────────────────────────────────────────────
 export const getCourses    = ()               => api.get("/courses/");
@@ -47,6 +48,7 @@ export const leaveCourse   = (courseId)       => api.delete(`/courses/${courseId
 
 // ── Questions ────────────────────────────────────────────────────────────────
 export const generateQuestion  = (data)     => api.post("/questions/generate", data);
+export const deleteQuestion    = (id)       => api.delete(`/questions/${id}`);
 export const getTopicQuestions = (topicId)  => api.get(`/questions/topic/${topicId}`);
 
 // ── Submissions ──────────────────────────────────────────────────────────────

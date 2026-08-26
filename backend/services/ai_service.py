@@ -84,11 +84,16 @@ MARK_DESCRIPTIONS = {
 # ── Main Functions ────────────────────────────────────────────────────────────
 
 def generate_question(topic_title: str, learning_outcomes: str,
-                      marking_rubric: str, difficulty: str = "medium",
+                      marking_rubric: str = None, difficulty: str = "medium",
                       model: str = None) -> str:
     """
     Generate a curriculum-based programming question aligned to the syllabus topic.
     The question must be answerable within the 1-10 gold standard marking rubric.
+
+    marking_rubric is optional — grading is anchored by GOLD_STANDARD_RUBRIC
+    (validated against the researcher's own marking, Section 3.5) plus the
+    topic's learning outcomes. A tutor may still supply topic-specific
+    detail here if they want finer-grained control.
     """
     model = model or ACTIVE_MODEL
 
@@ -102,14 +107,15 @@ def generate_question(topic_title: str, learning_outcomes: str,
                   "A perfect answer should be achievable in 15-30 lines of code.",
     }
 
+    rubric_line = f"Marking rubric: {marking_rubric}\n" if marking_rubric else ""
+
     prompt = f"""You are an expert JavaScript programming tutor creating exam questions.
 
 Generate ONE JavaScript programming question based on the following curriculum:
 
 Topic: {topic_title}
 Learning outcomes: {learning_outcomes}
-Marking rubric: {marking_rubric}
-Difficulty level: {difficulty} — {difficulty_guidance.get(difficulty, difficulty_guidance['medium'])}
+{rubric_line}Difficulty level: {difficulty} — {difficulty_guidance.get(difficulty, difficulty_guidance['medium'])}
 
 CRITICAL RULES:
 - The question must be directly about the topic stated above.
@@ -126,13 +132,22 @@ Return ONLY the question text. No preamble, no numbering, no extra text."""
 
 
 def generate_feedback(question_text: str, code_submitted: str,
-                      learning_outcomes: str, marking_rubric: str,
+                      learning_outcomes: str, marking_rubric: str = None,
                       model: str = None) -> dict:
     """
     Analyse student code against the gold standard rubric.
     Returns score out of 10 and structured guided feedback.
+
+    marking_rubric is optional — GOLD_STANDARD_RUBRIC (validated against the
+    researcher's own marking, Section 3.5) is what actually anchors the
+    score in every case; a topic-specific rubric, if supplied, adds extra
+    detail on top of that rather than replacing it.
     """
     model = model or ACTIVE_MODEL
+
+    rubric_block = (
+        f"TUTOR'S MARKING RUBRIC:\n{marking_rubric}\n\n" if marking_rubric else ""
+    )
 
     prompt = f"""You are an expert JavaScript programming tutor marking student work.
 
@@ -142,10 +157,7 @@ QUESTION THE STUDENT WAS ASKED:
 CURRICULUM LEARNING OUTCOMES:
 {learning_outcomes}
 
-TUTOR'S MARKING RUBRIC:
-{marking_rubric}
-
-STUDENT'S SUBMITTED CODE:
+{rubric_block}STUDENT'S SUBMITTED CODE:
 ```
 {code_submitted}
 ```
@@ -154,7 +166,7 @@ STUDENT'S SUBMITTED CODE:
 
 YOUR TASK:
 1. Read the student's code carefully.
-2. Compare it against the question, learning outcomes, and marking rubric.
+2. Compare it against the question and learning outcomes{' and tutor rubric' if marking_rubric else ''}.
 3. Use the NEXICODE OFFICIAL MARKING RUBRIC above to decide the score.
 4. Write structured guided feedback in exactly this format:
 
@@ -295,7 +307,13 @@ def _call_claude(prompt: str) -> str:
         max_tokens=1200,
         messages=[{"role": "user", "content": prompt}],
     )
-    return message.content[0].text.strip()
+    # Some models return non-text content blocks first (e.g. an extended
+    # thinking block), which don't have a .text attribute. Find the
+    # actual text block instead of assuming it's always content[0].
+    for block in message.content:
+        if getattr(block, "type", None) == "text":
+            return block.text.strip()
+    raise ValueError("Claude returned no text content in its response.")
 
 
 def _call_openai(prompt: str) -> str:

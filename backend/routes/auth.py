@@ -80,7 +80,6 @@ def google_login():
 
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     if not client_id:
-        # Fails loudly rather than silently accepting unverifiable tokens
         return jsonify({'error': 'Google sign-in is not configured on this server'}), 503
 
     try:
@@ -97,14 +96,11 @@ def google_login():
     user = User.query.filter_by(email=email).first()
 
     if not user:
-        # First time this Google account has signed in — create the
-        # account. It gets an unusable random password hash since it
-        # will only ever authenticate via Google, never a password.
         user = User(
             name=payload.get('name', email.split('@')[0]),
             email=email,
             password_hash=generate_password_hash(secrets.token_urlsafe(32)),
-            role='student',  # tutor accounts are provisioned separately
+            role='student',
         )
         db.session.add(user)
         db.session.commit()
@@ -150,3 +146,58 @@ def change_password():
     user.password_hash = generate_password_hash(data['new_password'])
     db.session.commit()
     return jsonify({'message': 'Password updated successfully'}), 200
+
+
+@auth_bp.route('/account', methods=['DELETE'])
+@jwt_required()
+def delete_account():
+    """Permanently deletes the logged-in user's own account and every
+    record that depends on it. Requires the current password as
+    confirmation, same as change-password, since this is irreversible.
+
+    Tutor accounts: every course they own is removed via the same
+    cascade used by DELETE /courses/<id> (routes/courses.py), so a
+    tutor's courses, topics, questions, submissions, feedback, and
+    enrolments are all cleaned up consistently — not a second, separate
+    implementation of the same cascade that could drift out of sync.
+
+    Student accounts: their own submissions (and dependent feedback /
+    AI results), enrolments, and progress report are removed directly,
+    since students don't own courses.
+    """
+    from extensions import db
+    from models import (
+        User, Course, Submission, Feedback, AIModelResult,
+        Enrollment, ProgressReport,
+    )
+    from routes.courses import delete_course_cascade
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.get_json() or {}
+    if not data.get('password'):
+        return jsonify({'error': 'password is required to confirm account deletion'}), 400
+
+    if not check_password_hash(user.password_hash, data['password']):
+        return jsonify({'error': 'Incorrect password'}), 401
+
+    if user.role == 'tutor':
+        owned_courses = Course.query.filter_by(tutor_id=user.id).all()
+        for course in owned_courses:
+            delete_course_cascade(course)
+    else:
+        submission_ids = [s.id for s in Submission.query.filter_by(student_id=user.id).all()]
+        if submission_ids:
+            Feedback.query.filter(Feedback.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+            AIModelResult.query.filter(AIModelResult.submission_id.in_(submission_ids)).delete(synchronize_session=False)
+            Submission.query.filter(Submission.id.in_(submission_ids)).delete(synchronize_session=False)
+        Enrollment.query.filter_by(student_id=user.id).delete(synchronize_session=False)
+        ProgressReport.query.filter_by(student_id=user.id).delete(synchronize_session=False)
+
+    db.session.delete(user)
+    db.session.commit()
+
+    return jsonify({'message': 'Account deleted successfully'}), 200

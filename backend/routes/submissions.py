@@ -1,10 +1,9 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db, limiter
-from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic, Enrollment
+from models import Submission, Question, Feedback, AIModelResult, SyllabusTopic, Enrollment, User
 from services.ai_service import generate_feedback, compare_models
 from services.code_quality_scorer import score_code_quality
-from routes.courses import GOLD_STANDARD_TUTOR_EMAIL
 
 submissions_bp = Blueprint("submissions", __name__)
 
@@ -16,6 +15,10 @@ submissions_bp = Blueprint("submissions", __name__)
 def submit_code():
     """Student submits code → AI generates feedback immediately."""
     user_id = get_jwt_identity()    # this is just the user's ID string
+    user = User.query.get(user_id)
+    if not user or user.role != "student":
+        return jsonify({"error": "Only students can submit code"}), 403
+
     data = request.get_json()
 
     if not data or not data.get("question_id") or not data.get("code_submitted"):
@@ -27,6 +30,7 @@ def submit_code():
 
     topic = SyllabusTopic.query.get(question.topic_id)
 
+    from routes.courses import GOLD_STANDARD_TUTOR_EMAIL
     if topic.course.tutor and topic.course.tutor.email == GOLD_STANDARD_TUTOR_EMAIL:
         return jsonify({"error": "This question bank is reserved for internal evaluation and does not accept student submissions"}), 403
 
@@ -86,12 +90,20 @@ def submit_code():
 @limiter.limit("10 per hour")  # this one calls up to 3 AI models at once
 def compare_all_models(submission_id):
     """Run the submission through all 3 AI models for comparison."""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
     submission = Submission.query.get(submission_id)
     if not submission:
         return jsonify({"error": "Submission not found"}), 404
 
     question = Question.query.get(submission.question_id)
     topic    = SyllabusTopic.query.get(question.topic_id)
+
+    is_owner = submission.student_id == user_id
+    is_course_tutor = user and user.role == "tutor" and topic.course.tutor_id == user_id
+    if not (is_owner or is_course_tutor):
+        return jsonify({"error": "You do not have access to this submission"}), 403
 
     results = compare_models(
         question_text=question.question_text,

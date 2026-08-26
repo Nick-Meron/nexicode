@@ -10,6 +10,7 @@ export default function RegisterPage() {
   const [form, setForm]       = useState({ name: "", email: "", password: "", role: "student" });
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,17 +18,30 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const res = await register(form);
-      loginUser(res.data.token, res.data.user);
-      navigate(res.data.user.role === "tutor" ? "/tutor" : "/student");
+      setShowSuccess(true);
+      
+      setTimeout(() => {
+        loginUser(res.data.token, res.data.user);
+        navigate(res.data.user.role === "tutor" ? "/tutor" : "/student");
+      }, 1500);
     } catch (err) {
       setError(err.response?.data?.error || "Registration failed");
-    } finally {
       setLoading(false);
     }
   };
 
   return (
     <div style={s.page}>
+
+      {showSuccess && (
+        <div style={s.overlay}>
+          <div style={s.toast}>
+            <span style={s.toastIcon}>🎉</span>
+            <p style={s.toastTitle}>Account created successfully!</p>
+            <p style={s.toastSub}>Taking you to your dashboard…</p>
+          </div>
+        </div>
+      )}
 
       {/* Left panel */}
       <div style={s.left}>
@@ -137,4 +151,22 @@ const s = {
   btn:          { width: "100%", padding: "12px 0", background: BLUE, color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, marginTop: 4, boxShadow: "0 4px 16px rgba(14,165,233,0.3)" },
   error:        { background: "#fef2f2", color: "#dc2626", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #fecaca" },
   footer:       { textAlign: "center", marginTop: 12, fontSize: 13, color: "#64748b" },
+  overlay: {
+    position: "fixed", inset: 0, zIndex: 2000,
+    background: "rgba(16,16,29,0.45)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
+  toast: {
+    background: "#fff", borderRadius: 16, padding: "40px 36px",
+    maxWidth: 380, width: "90%", textAlign: "center",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+    animation: "nxToastIn 0.3s cubic-bezier(0.16,1,0.3,1)",
+  },
+  toastIcon: {
+    width: 72, height: 72, borderRadius: "50%", background: "#f0fdf4",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 40, margin: "0 auto 20px",
+  },
+  toastTitle: { fontSize: 22, fontWeight: 800, color: "#15803d", margin: "0 0 12px" },
+  toastSub:   { fontSize: 15, color: "#64748b", margin: "4px 0" },
 };
