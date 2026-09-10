@@ -443,9 +443,14 @@ useEffect(() => {
                   <h3 className="nx-card-title">Score History</h3>
                   {progress.score_trend?.length > 0 ? (
                     <div>
-                      {progress.score_trend.map((s_) => (
-                        <div key={s_.index} className="nx-bar-row">
-                          <span className="nx-bar-label" title={s_.topic}>#{s_.index}</span>
+                      {[...progress.score_trend].reverse().map((s_) => (
+                        <div key={s_.index} className="nx-bar-row nx-bar-row-detailed">
+                          <div className="nx-bar-meta">
+                            <span className="nx-bar-topic">{s_.topic}</span>
+                            <span className="nx-bar-date">
+                              {new Date(s_.submitted_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                            </span>
+                          </div>
                           <div className="nx-bar-track">
                             <div className="nx-bar-fill" style={{ width: `${s_.score * 10}%`, background: scoreColor(s_.score) }} />
                           </div>
